@@ -9,6 +9,7 @@ import * as eta from 'eta';
 
 import * as middleware from './middleware/index.js';
 import * as routers from './routers/index.js';
+import * as pokedexRouter from './routers/pokedex.js';
 import assets from '../public/build/assets.js';
 import { env, paths } from '../utils/index.js';
 
@@ -39,6 +40,7 @@ app
 
 // app routes
 app.use('/', routers.home);
+app.use('/pokedex', pokedexRouter.pokedex);
 
 // app error handlers
 app.use(middleware.notFound());
