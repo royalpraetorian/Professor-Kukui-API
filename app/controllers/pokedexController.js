@@ -19,6 +19,15 @@ export async function getMetagame(req, res) {
   res.send(results);
 }
 
+export async function parsePokePaste(req, res) {
+  try {
+    let parsedData = pokedexService.parsePokePaste(req.body);
+    res.send(parsedData);
+  } catch (e) {
+    console.log(e);
+  }
+}
+
 export async function getPokemonMoves(req, res) {
   try {
     let results = await pokedexService.getFilteredMoveList(

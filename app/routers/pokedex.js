@@ -5,3 +5,4 @@ export const pokedex = Router();
 pokedex.get('/pokemon', pokedexController.getPokemonByName);
 pokedex.get('/pokemon/moves', pokedexController.getPokemonMoves);
 pokedex.get('/metagame', pokedexController.getMetagame);
+pokedex.get('/parse', pokedexController.parsePokePaste);

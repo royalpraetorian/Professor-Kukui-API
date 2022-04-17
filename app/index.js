@@ -12,6 +12,7 @@ import * as routers from './routers/index.js';
 import * as pokedexRouter from './routers/pokedex.js';
 import assets from '../public/build/assets.js';
 import { env, paths } from '../utils/index.js';
+import bodyParser from 'body-parser';
 
 const app = express();
 
@@ -36,7 +37,8 @@ app
   .use(express.urlencoded({ extended: true }), hpp())
   .use(express.static(paths.public))
   .use(favicon(`${paths.public}/favicon.ico`))
-  .use(csurf({ cookie: true }), middleware.csrfToken());
+  .use(csurf({ cookie: true }), middleware.csrfToken())
+  .use(bodyParser.text());
 
 // app routes
 app.use('/', routers.home);
