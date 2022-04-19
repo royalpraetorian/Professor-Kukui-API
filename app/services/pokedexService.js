@@ -1,7 +1,9 @@
+import app from '../index.js';
 import * as pokeApiService from './pokeApiService.js';
+import * as showdownService from './showdownService.js';
 
-export async function getFilteredMoveList(pokemon, level, generation) {
-  return (await getMoveList(pokemon)).filter(moveEntry =>
+export function getFilteredMoveList(pokemonData, level, generation) {
+  return pokemonData.moves.filter(moveEntry =>
     moveEntry.version_group_details.some(
       vgd =>
         vgd.level_learned_at <= level &&
@@ -10,10 +12,10 @@ export async function getFilteredMoveList(pokemon, level, generation) {
   );
 }
 
-async function getMoveList(pokemon) {
-  let movelist = await pokeApiService.findPokemonByName(pokemon);
-  return movelist.moves;
-}
+// async function getMoveList(pokemon) {
+//   let movelist = await pokeApiService.findPokemonByName(pokemon);
+//   return movelist.moves;
+// }
 
 // function getNamesOfGeneration(generation) {
 //   switch (generation) {
@@ -242,4 +244,363 @@ So we parse the first line as a special case, then loop for i=1; i<lines.legnth;
     }
   }
   return pokemon;
+}
+
+function parseFormat(format) {
+  /*Format is always listed as gen[0-9]*[^0-9]*
+  Where [0-9]* is the generation number
+  And [^0-9]* is the tier.
+  For example, Generation 4 (gen) OU (tier) is written as gen4ou.
+  */
+  let augmnetedFormat = {
+    gen: '',
+    tier: ''
+  };
+
+  let genMatch = /(?<=gen)[0-9]*/; //Any set of numbers preceded by 'gen'
+  let tierMatch = /(?<=[0-9])[^0-9]*$/; //Any set of non-numbers preceded by a number, up to the end of the line.
+
+  augmnetedFormat.gen = format.match(genMatch)[0].trim();
+  augmnetedFormat.tier = format.match(tierMatch)[0].trim();
+
+  return augmnetedFormat;
+}
+
+export async function getOffenseMatchups(pokemonBuild, format) {
+  //Get pokemon data about the pokemon from pokeAPI
+  let pokemonData = await pokeApiService.findPokemonByName(
+    pokemonBuild.Pokemon
+  );
+
+  //Discect format into generation and tier.
+  format = parseFormat(format); //We're going to mutate this an essentially augment it with .gen and .tier
+
+  //Get a list of the moves that pokemon is allowed to learn.
+  //Also generate a set of the moves it already has
+  let filteredMoveList = getFilteredMoveList(
+    pokemonData,
+    pokemonBuild.Level,
+    format.gen
+  );
+  let buildMoves = [];
+
+  //Augment filteredMoveList with move data (type, power, accuracy, etc)
+
+  filteredMoveList.forEach(filtMove => {
+    filtMove.move.name = filtMove.move.name.replace('-', ''); //Format to match keys in app.data.moves
+    let moveData = app.data.moves[filtMove.move.name]; //Get from app.data.moves cache.
+    filtMove.data = moveData; //Augment.
+    //Check if the pokeBuild is using that move and add to buildMoves if it is.
+    if (pokemonBuild.Moves.some(move => move == moveData.name)) {
+      buildMoves.push(moveData);
+    }
+  });
+
+  //Get a list of the pokemon in that format (tier + generation)
+
+  let metagame = await showdownService.getMetagame(
+    'gen' + format.gen + format.tier
+  );
+  metagame = metagame.pokemon; //TODO: Cache this.
+  let pokemonInTier = Object.keys(metagame);
+
+  //Define matchup spread object
+  let matchups = {
+    0: {
+      count: 0,
+      pokemon: []
+    },
+    0.25: {
+      count: 0,
+      pokemon: []
+    },
+    0.5: {
+      count: 0,
+      pokemon: []
+    },
+    1: {
+      count: 0,
+      pokemon: []
+    },
+    2: {
+      count: 0,
+      pokemon: []
+    },
+    4: {
+      count: 0,
+      pokemon: []
+    }
+  };
+
+  //Augment each mon with its types, and check effectiveness
+  pokemonInTier.forEach(mon => {
+    console.log('Checking effectiveness against: ' + mon);
+    //Clean up mon to make it lowercase and remove strange characters.
+    let monName = mon.toLowerCase();
+    //replaceAll doesn't seem to work so we use a while loop.
+    while (monName.includes('-')) {
+      //Replace hyphens
+      monName = monName.replace('-', '');
+    }
+    while (monName.includes(' ')) {
+      //Replace spaces
+      monName = monName.replace(' ', '');
+    }
+    while (monName.includes('%')) {
+      monName = monName.replace('%', '');
+    }
+    while (monName.includes('’')) {
+      monName = monName.replace('’', '');
+    }
+    while (monName.includes('.')) {
+      monName = monName.replace('.', '');
+    }
+    let types = app.data.pokedex[monName].types;
+    /*For each move the pokemon knows in its current build,
+    Check the effectiveness of that move against each pokemon.
+    Keep the highest number.
+    */
+    let monData = metagame[mon];
+    monData.effectiveness = 0;
+    buildMoves.forEach(move => {
+      //The effectiveness of the move starts at 1
+      let effectiveness = 1;
+      //Check how many types the pokemon has
+      if (types.length == 1) {
+        effectiveness *= checkEffectiveness(move.type, types[0], format.gen);
+      } else {
+        //For each type the pokemon has, multiply effectiveness by the result of checkEffectiveness()
+        types.forEach(
+          type =>
+            (effectiveness *= checkEffectiveness(move.type, type, format.gen))
+        );
+      }
+      //If the effectiveness of this move is > than the stored value of the pokemon, overwrite it.
+      if (effectiveness > monData.effectiveness) {
+        monData.effectiveness = effectiveness;
+      }
+    });
+    //Sort pokemon into groups in matchup spread based on their effectiveness.
+    matchups[monData.effectiveness].pokemon.push({
+      name: mon,
+      usage: monData.usage.weighted
+    });
+    matchups[monData.effectiveness].count++;
+  });
+
+  return {
+    matchups
+  };
+}
+
+function checkEffectiveness(attackType, defenseType, generation) {
+  /*Types is indexed first by attacking type, then by defending type, and returns the damage multiplier.
+  For example, to find the effectiveness of a normal-type attack on a steel-type pokemon you would return types['Normal']['Steel'], which would be 0.5.
+  If a defensive type is not listed, it is neutral (1x).
+  If a defensive type is an object {} with keys default and one or more numbers, the keys represent previous generations.
+  For example Bug[Poison] has default: 0.5 and 1: 2 because in gen 1 it dealt 2x damage to poison, but this changed from gen 2 onwards.
+  */
+  let types = {
+    Normal: {
+      Rock: 0.5,
+      Ghost: 0,
+      Steel: 0.5
+    },
+    Fighting: {
+      Normal: 2,
+      Flying: 0.5,
+      Poison: 0.5,
+      Rock: 2,
+      Bug: 0.5,
+      Ghost: 0,
+      Steel: 2,
+      Psychic: 0.5,
+      Ice: 2,
+      Dark: 2,
+      Fairy: 0.5
+    },
+    Flying: {
+      Fighting: 2,
+      Rock: 0.5,
+      Bug: 2,
+      Steel: 0.5,
+      Grass: 2,
+      Electric: 0.5
+    },
+    Poison: {
+      Poison: 0.5,
+      Ground: 0.5,
+      Rock: 0.5,
+      Ghost: 0.5,
+      Bug: {
+        default: 1,
+        1: 2
+      },
+      Grass: 2,
+      Fairy: 2
+    },
+    Ground: {
+      Poison: 2,
+      Rock: 2,
+      Bug: 0.5,
+      Steel: 2,
+      Fire: 2,
+      Grass: 0.5,
+      Electric: 2
+    },
+    Rock: {
+      Fighting: 0.5,
+      Flying: 2,
+      Ground: 0.5,
+      Bug: 2,
+      Steel: 0.5,
+      Fire: 2,
+      Ice: 2
+    },
+    Bug: {
+      Fighting: 0.5,
+      Flying: 0.5,
+      Poison: {
+        default: 0.5,
+        1: 2
+      },
+      Ghost: 0.5,
+      Steel: 0.5,
+      Fire: 0.5,
+      Grass: 2,
+      Psychic: 2,
+      Dark: 2,
+      Fairy: 0.5
+    },
+    Ghost: {
+      Normal: 0,
+      Ghost: 2,
+      Psychic: {
+        default: 2,
+        1: 0
+      },
+      Dark: 0.5,
+      Steel: {
+        default: 1,
+        2: 0.5,
+        3: 0.5,
+        4: 0.5,
+        5: 0.5
+      }
+    },
+    Steel: {
+      Rock: 2,
+      Steel: 0.5,
+      Fire: 0.5,
+      Water: 0.5,
+      Electric: 0.5,
+      Ice: 2,
+      Fairy: 2
+    },
+    Fire: {
+      Rock: 0.5,
+      Bug: 2,
+      Steel: 2,
+      Fire: 0.5,
+      Water: 0.5,
+      Grass: 2,
+      Ice: 2,
+      Dragon: 0.5
+    },
+    Water: {
+      Ground: 2,
+      Rock: 2,
+      Fire: 2,
+      Water: 0.5,
+      Grass: 0.5,
+      Dragon: 0.5
+    },
+    Grass: {
+      Flying: 0.5,
+      Poison: 0.5,
+      Ground: 2,
+      Rock: 2,
+      Bug: 0.5,
+      Steel: 0.5,
+      Fire: 0.5,
+      Water: 2,
+      Grass: 0.5,
+      Dragon: 0.5
+    },
+    Electric: {
+      Flying: 2,
+      Ground: 0,
+      Water: 2,
+      Grass: 0.5,
+      Electric: 0.5,
+      Dragon: 0.5
+    },
+    Psychic: {
+      Fighting: 2,
+      Poison: 2,
+      Steel: 0.5,
+      Psychic: 0.5,
+      Dark: 0
+    },
+    Ice: {
+      Flying: 2,
+      Ground: 2,
+      Steel: 0.5,
+      Fire: {
+        default: 0.5,
+        1: 1
+      },
+      Water: 0.5,
+      Grass: 2,
+      Ice: 0.5,
+      Dragon: 2
+    },
+    Dragon: {
+      Steel: 0.5,
+      Dragon: 2,
+      Fairy: 0
+    },
+    Dark: {
+      Fighting: 0.5,
+      Ghost: 2,
+      Psychic: 2,
+      Dark: 0.5,
+      Fairy: 0.5,
+      Steel: {
+        default: 1,
+        2: 0.5,
+        3: 0.5,
+        4: 0.5,
+        5: 0.5
+      }
+    },
+    Fairy: {
+      Fighting: 2,
+      Poison: 0.5,
+      Steel: 0.5,
+      Fire: 0.5,
+      Dragon: 2,
+      Dark: 2
+    }
+  };
+  //Set default value of 1
+  let effectiveness = 1;
+
+  try {
+    //Try to get the full string. This will throw an error if the type matchup is neutral.
+    //So in the catch statement we'll set it to 1 just to be safe.
+    effectiveness = types[attackType][defenseType][generation];
+    //This will be undefined if the type matchup doesn't have an edge case for that gen, so try default.
+    if (effectiveness == undefined) {
+      effectiveness = types[attackType][defenseType].default;
+      //This will be undefined if no generation-based edge-cases exist for that matchup.
+      if (effectiveness == undefined) {
+        effectiveness = types[attackType][defenseType];
+      }
+    }
+  } catch (e) {
+    effectiveness = 1;
+  }
+
+  return effectiveness;
 }

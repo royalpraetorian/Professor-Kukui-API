@@ -28,6 +28,19 @@ export async function parsePokePaste(req, res) {
   }
 }
 
+export async function getOffensiveMatchups(req, res) {
+  let pokemon = pokedexService.parsePokePaste(req.body);
+  console.log(
+    'Getting matchup chart for: ' + pokemon.Pokemon + ' in ' + req.query.format
+  );
+  let results = await pokedexService.getOffenseMatchups(
+    pokemon,
+    req.query.format
+  );
+  console.log('Finished');
+  res.send(results);
+}
+
 export async function getPokemonMoves(req, res) {
   try {
     let results = await pokedexService.getFilteredMoveList(
