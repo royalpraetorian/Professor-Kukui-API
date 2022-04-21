@@ -266,11 +266,17 @@ function parseFormat(format) {
   return augmnetedFormat;
 }
 
+// function augmentMoves(filteredMoveList) {}
+
 export async function getOffenseMatchups(pokemonBuild, format) {
   //Get pokemon data about the pokemon from pokeAPI
   let pokemonData = await pokeApiService.findPokemonByName(
     pokemonBuild.Pokemon
   );
+
+  //Augment pokemonBuild with Types
+  pokemonBuild.Types =
+    app.data.pokedex[normalizeString(pokemonBuild.Pokemon)].types;
 
   //Discect format into generation and tier.
   format = parseFormat(format); //We're going to mutate this an essentially augment it with .gen and .tier
@@ -287,7 +293,7 @@ export async function getOffenseMatchups(pokemonBuild, format) {
   //Augment filteredMoveList with move data (type, power, accuracy, etc)
 
   filteredMoveList.forEach(filtMove => {
-    filtMove.move.name = filtMove.move.name.replace('-', ''); //Format to match keys in app.data.moves
+    filtMove.move.name = normalizeString(filtMove.move.name); //Format to match keys in app.data.moves
     let moveData = app.data.moves[filtMove.move.name]; //Get from app.data.moves cache.
     filtMove.data = moveData; //Augment.
     //Check if the pokeBuild is using that move and add to buildMoves if it is.
@@ -305,95 +311,385 @@ export async function getOffenseMatchups(pokemonBuild, format) {
   let pokemonInTier = Object.keys(metagame);
 
   //Define matchup spread object
-  let matchups = {
-    0: {
-      count: 0,
-      pokemon: []
-    },
-    0.25: {
-      count: 0,
-      pokemon: []
-    },
-    0.5: {
-      count: 0,
-      pokemon: []
-    },
-    1: {
-      count: 0,
-      pokemon: []
-    },
-    2: {
-      count: 0,
-      pokemon: []
-    },
-    4: {
-      count: 0,
-      pokemon: []
-    }
-  };
+  // let matchups = {
+  //   0: {
+  //     count: 0,
+  //     pokemon: []
+  //   },
+  //   0.25: {
+  //     count: 0,
+  //     pokemon: []
+  //   },
+  //   0.5: {
+  //     count: 0,
+  //     pokemon: []
+  //   },
+  //   1: {
+  //     count: 0,
+  //     pokemon: []
+  //   },
+  //   2: {
+  //     count: 0,
+  //     pokemon: []
+  //   },
+  //   4: {
+  //     count: 0,
+  //     pokemon: []
+  //   }
+  // };
 
-  //Augment each mon with its types, and check effectiveness
+  //Define the set of enemy pokemon to check against.
+  let enemySet = {};
+  /*Narrow down pokemonInTier to only the mons we actually care about.
+  Remove all not-fully-evolved forms. This information is stored in our JSON object under a key called 'evos'
+  If a pokemon is fully evolved, the 'evos' key will not be present.
+  */
   pokemonInTier.forEach(mon => {
-    console.log('Checking effectiveness against: ' + mon);
-    //Clean up mon to make it lowercase and remove strange characters.
-    let monName = mon.toLowerCase();
-    //replaceAll doesn't seem to work so we use a while loop.
-    while (monName.includes('-')) {
-      //Replace hyphens
-      monName = monName.replace('-', '');
+    let monName = normalizeString(mon);
+    if (app.data.pokedex[monName].evos == null) {
+      enemySet[monName] = app.data.pokedex[monName];
+      enemySet[monName].usage = {
+        weighted: metagame[mon].usage.weighted
+      };
     }
-    while (monName.includes(' ')) {
-      //Replace spaces
-      monName = monName.replace(' ', '');
-    }
-    while (monName.includes('%')) {
-      monName = monName.replace('%', '');
-    }
-    while (monName.includes('’')) {
-      monName = monName.replace('’', '');
-    }
-    while (monName.includes('.')) {
-      monName = monName.replace('.', '');
-    }
-    let types = app.data.pokedex[monName].types;
-    /*For each move the pokemon knows in its current build,
-    Check the effectiveness of that move against each pokemon.
-    Keep the highest number.
-    */
-    let monData = metagame[mon];
-    monData.effectiveness = 0;
-    buildMoves.forEach(move => {
-      //The effectiveness of the move starts at 1
-      let effectiveness = 1;
-      //Check how many types the pokemon has
-      if (types.length == 1) {
-        effectiveness *= checkEffectiveness(move.type, types[0], format.gen);
-      } else {
-        //For each type the pokemon has, multiply effectiveness by the result of checkEffectiveness()
-        types.forEach(
-          type =>
-            (effectiveness *= checkEffectiveness(move.type, type, format.gen))
-        );
-      }
-      //If the effectiveness of this move is > than the stored value of the pokemon, overwrite it.
-      if (effectiveness > monData.effectiveness) {
-        monData.effectiveness = effectiveness;
-      }
-    });
-    //Sort pokemon into groups in matchup spread based on their effectiveness.
-    matchups[monData.effectiveness].pokemon.push({
-      name: mon,
-      usage: monData.usage.weighted
-    });
-    matchups[monData.effectiveness].count++;
   });
 
+  let matchup = checkOffensiveMatchup(
+    pokemonBuild,
+    buildMoves,
+    enemySet,
+    format
+  );
+
   return {
-    matchups
+    matchup
   };
 }
 
-function checkEffectiveness(attackType, defenseType, generation) {
+function checkOffensiveMatchup(pokemonBuild, moves, enemySet, format) {
+  //Get list of keys from enemySet
+  let enemySetKeys = Object.keys(enemySet);
+
+  //Define return object
+  let matchup = {};
+
+  //Check effectiveness of each move against each mon
+  enemySetKeys.forEach(mon => {
+    console.log('Checking effectiveness against: ' + mon);
+    /*For each move the pokemon knows in its current build,
+  Check the effectiveness of that move against each pokemon.
+  Keep the highest number.
+  */
+    let monData = enemySet[mon];
+    monData.effectiveness = 0;
+    if (moves.length > 1) {
+      moves.forEach(move => {
+        //The effectiveness of the move starts at 1
+        let effectiveness = checkMoveEffectiveness(
+          move,
+          pokemonBuild,
+          monData,
+          format
+        );
+
+        if (effectiveness > monData.effectiveness) {
+          //If the effectiveness of this move is > than the stored value of the pokemon, overwrite it.
+          monData.effectiveness = effectiveness;
+        }
+      });
+    } else if (moves.length > 0) {
+      let effectiveness = checkMoveEffectiveness(
+        moves[0],
+        pokemonBuild,
+        monData,
+        format
+      );
+
+      if (effectiveness > monData.effectiveness) {
+        monData.effectiveness = effectiveness;
+      }
+    } else {
+      return {};
+    }
+
+    //Check if key exists in matchups, if it doesn't: add it.
+    let keys = Object.keys(matchup);
+    if (keys.length == 0 || !keys.includes(monData.effectiveness.toString())) {
+      matchup[monData.effectiveness] = {
+        count: 0,
+        pokemon: []
+      };
+    }
+
+    //Sort pokemon into groups in matchup spread based on their effectiveness.
+    matchup[monData.effectiveness].pokemon.push({
+      name: monData.name,
+      usage: monData.usage.weighted
+    });
+    matchup[monData.effectiveness].count++;
+  });
+
+  return matchup;
+}
+
+function normalizeString(input) {
+  //Removes special characters and returns lower-case string.
+  let regex = /[^a-zA-Z]/i;
+  while (input.match(regex) != null) {
+    input = input.replace(regex, '');
+  }
+  return input.toLowerCase();
+}
+
+function checkMoveEffectiveness(
+  move,
+  attacker,
+  defender,
+  format,
+  weather = 'none',
+  terrain = 'none'
+) {
+  //Effectiveness is calculated beginning at 1
+  let effectiveness = 1;
+
+  //We'll be using this a lot so let's shorten it a little.
+  let defenderTypes = defender.types;
+
+  /*Check if the user is using flying-press.
+  Flying press is the only multi-type attack in the game.
+  As such it must be treated specially.
+  */
+
+  //@todo Check for Aerilate, etc, which change move type. Possibly do this at a higher level to reduce calculations?
+
+  //Check if the defender is multi-type
+  if (defenderTypes.length == 1) {
+    if (
+      defenderTypes[0] == 'Ghost' &&
+      (move.type == 'Normal' || move.type == 'Fighting') &&
+      monHasAbility(attacker, 'Scrappy')
+    ) {
+      effectiveness *= 1;
+    } else {
+      effectiveness *= checkTypeEffectiveness(
+        move.type,
+        defenderTypes[0],
+        format.gen
+      );
+    }
+  } else {
+    //For each type the pokemon has, multiply effectiveness by theresult of checkEffectiveness()
+    defenderTypes.forEach(type => {
+      if (
+        type == 'Ghost' &&
+        (move.type == 'Normal' || move.type == 'Fighting') &&
+        monHasAbility(attacker, 'Scrappy')
+      ) {
+        effectiveness *= 1;
+      } else {
+        effectiveness *= checkTypeEffectiveness(move.type, type, format.gen);
+      }
+    });
+
+    /*Immediately after effectiveness has been checked, check for certain super-effective clauses.
+    Expert belt multiplies super-effective damage by 1.2x, for example, and we can only reliably check if a pokemon is super-effected
+    By a move before we have applied any other modifiers.
+    */
+    if (effectiveness >= 2) {
+      if (
+        monHasAbility(defender, 'Wonder Guard') &&
+        !monHasAbility(attacker, 'Mold Breaker')
+      ) {
+        return 0;
+      }
+      if (attacker.Item == 'Expert Belt') {
+        effectiveness *= 1.2;
+      }
+      if (
+        (monHasAbility(defender, 'Filter') ||
+          monHasAbility(defender, 'Solid Rock')) &&
+        !monHasAbility(attacker, 'Mold Breaker')
+      ) {
+        effectiveness *= 0.75;
+      }
+    }
+  }
+
+  //Set critical hit flag for use later.
+  let criticalHit = false;
+
+  //Weather and Terrain switches
+  switch (weather) {
+    default:
+      break;
+  }
+  switch (terrain) {
+    default:
+      break;
+  }
+
+  //@todo Add prio checks for mons with Dazzling, Queenly Majesty, or Psychic Surge
+
+  //@todo Figure out if I want to factor in weight for moves like Low Kick. If so, consider Heavy Metal and Light Metal perhaps?
+
+  //Some checks to run that will return 0 automatically if the attacker does not have Mold Breaker, saving us some calculations.
+  //@todo Possibly consider casting Teravolt and Turboblaze to Mold Breaker for less checks?
+  if (!monHasAbilities(attacker, ['Mold Breaker', 'Teravolt', 'Turboblaze'])) {
+    /*Switches are more effecient than if statements
+    //I coded these in the order they show up on the bulbapedia entry for Mold Breaker
+    They are ordered to assume the worst case. For example, when checking fire-type moves, we check for Flash Fire first,
+    As that has a 0x multiplier. Then we check for Heatproof, as that has a 0.5x multiplier. Then we check for Dry Skin,
+    As that will actually increase our damage. We want to be as cautious as possible, just in case a pokemon has all three.
+    Factoring multiple abilities into our math will become nonsense very quickly, so since we can only assume one,
+    We want to assume the worst. This also saves a tiny amount of processing time.
+    */
+
+    //@todo Fluffy
+    if (monHasAbility(defender, 'Fluffy') && move.flags.contact == 1) {
+      effectiveness *= 0.5;
+    }
+
+    //@todo Consider redoing this as a switch on defender ability, to save processes.
+    //@todo only apply positive buffs if it is the only ability the defender has.
+    switch (move.type) {
+      case 'Water':
+        if (monHasAbility(defender, 'Dry Skin')) {
+          return 0;
+        } else if (monHasAbility(defender, 'Storm Drain')) {
+          return 0;
+        } else if (monHasAbility(defender, 'Water Absorb')) {
+          return 0;
+        }
+        break;
+      case 'Fire':
+        if (monHasAbility(defender, 'Flash Fire')) {
+          return 0;
+        } else if (monHasAbility(defender, 'Heatproof')) {
+          effectiveness *= 0.5;
+        } else if (monHasAbility(defender, 'Water Bubble')) {
+          effectiveness *= 0.5;
+        } else if (monHasAbility(defender, 'Thick Fat')) {
+          effectiveness *= 0.5;
+        } else if (monHasAbility(defender, 'Dry Skin')) {
+          effectiveness *= 1.25;
+        } else if (monHasAbility(defender, 'Fluffy')) {
+          effectiveness *= 2;
+        }
+        break;
+      case 'Ground':
+        if (monHasAbility(defender, 'Levitate')) {
+          return 0;
+        }
+        break;
+      case 'Electric':
+        if (monHasAbility(defender, 'Lightning Rod')) {
+          return 0;
+        } else if (monHasAbility(defender, 'Motor Drive')) {
+          return 0;
+        } else if (monHasAbility(defender, 'Volt Absorb')) {
+          return 0;
+        }
+        break;
+      case 'Ice':
+        if (monHasAbility(defender, 'Thick Fat')) {
+          effectiveness *= 0.5;
+        }
+        break;
+      case 'Grass':
+        if (monHasAbility(defender, 'Sap Sipper')) {
+          return 0;
+        }
+        break;
+      default:
+        break;
+    }
+
+    if (monHasAbility(defender, 'Bulletproof') && move.flags.bullet == 1) {
+      return 0;
+    }
+    if (monHasAbility(defender, 'Soundproof') && move.flags.sound == 1) {
+      return 0;
+    }
+  }
+
+  //Critical strike check for moves like Surging Strikes
+  if (move.willCrit) {
+    if (
+      !monHasAbilities(defender, ['Shell Armor', 'Battle Armor']) ||
+      monHasAbilities(attacker, 'Mold Breaker')
+    ) {
+      //The move is a critical hit, but the damage calculations are based on generation.
+      criticalHit = true;
+      if (format.gen == 1) {
+        effectiveness *= (2 * attacker.Level + 5) / (attacker.Level + 5);
+      } else if (format.gen > 1 && format.gen < 6) {
+        effectiveness *= 2;
+      } else {
+        effectiveness *= 1.5;
+      }
+
+      //Additionally, pokemon with the Sniper ability get another 1.5x multiplier
+      if (monHasAbility(attacker, 'Sniper')) {
+        effectiveness *= 1.5;
+      }
+    }
+  }
+
+  //@todo Check for guranteed criticals from +3 or higher stages of critical increase
+
+  /*Check if the move gets Same Type Attack Bonus (STAB) and, if so, multiply effectiveness by 1.5x
+  A move gets STAB if it is the same type as the pokemon using it.
+  If the pokemon has Adaptibility as its ability, the move gets 2x instead of 1.5x.
+  First check if a pokemon has Protean or Libero, which will give all of its moves STAB.
+  */
+  if (monHasAbilities(attacker, ['Protean', 'Libero'])) {
+    effectiveness *= 1.5;
+  } else if (attacker.Types.includes(move.type)) {
+    if (attacker.Ability == 'Adaptability') {
+      effectiveness *= 2;
+    } else {
+      effectiveness *= 1.5;
+    }
+  }
+
+  //If the attacker has Water Bubble, its water type moves deal 2x damage
+  if (attacker.Ability == 'Water Bubble' && move.type == 'Water') {
+    effectiveness *= 2;
+  }
+
+  //Check for Ice Scales
+  if (monHasAbility(defender, 'Ice Scales') && move.category == 'Special') {
+    effectiveness *= 0.5;
+  }
+
+  //Check for stat dropping abilities like Intimidate
+  if (
+    monHasAbility(defender, 'Intimidate') &&
+    !criticalHit &&
+    move.category == 'Physical' &&
+    !monHasAbilities(attacker, [
+      'Hyper Cutter',
+      'Clear Body',
+      'White Smoke',
+      'Full Metal Body',
+      'Inner Focus',
+      'Oblivious',
+      'Scrappy',
+      'Own Tempo'
+    ])
+  ) {
+    //Stat stages work differently by generation
+    if (format.gen < 3) {
+      effectiveness *= 66 / 100;
+    } else {
+      effectiveness *= 2 / 3;
+    }
+  }
+
+  return effectiveness;
+}
+
+function checkTypeEffectiveness(attackType, defenseType, generation) {
   /*Types is indexed first by attacking type, then by defending type, and returns the damage multiplier.
   For example, to find the effectiveness of a normal-type attack on a steel-type pokemon you would return types['Normal']['Steel'], which would be 0.5.
   If a defensive type is not listed, it is neutral (1x).
@@ -603,4 +899,34 @@ function checkEffectiveness(attackType, defenseType, generation) {
   }
 
   return effectiveness;
+}
+
+//@todo Consider re-writing this to accept multiple abilities, for better optimization. Or write a new method that accepts multiples.
+function monHasAbilities(mon, abilities) {
+  abilities.forEach(ability => {
+    if (monHasAbility(mon, ability)) {
+      return true;
+    }
+  });
+  return false;
+}
+
+function monHasAbility(mon, ability) {
+  //Check format of mon
+  if (mon.Ability != undefined) {
+    //Pokemon is in pokePaste format
+    return normalizeString(mon.Ability) == normalizeString(ability);
+  } else {
+    //Pokemon is probably in dex format and has .abilities instead
+    //Check if .abilities.length > 1
+    if (mon.abilities.length > 1) {
+      //Check with .some
+      return mon.abilities.some(monAbility => {
+        normalizeString(monAbility) == normalizeString(ability);
+      });
+    } else {
+      //Check with index 0 ==
+      return normalizeString(mon.abilities[0]) == normalizeString(ability);
+    }
+  }
 }
