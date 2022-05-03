@@ -10,3 +10,4 @@ pokedex.get(
   '/pokemon/matchups/offensive',
   pokedexController.getOffensiveMatchups
 );
+pokedex.get('/pokemon/optimize', pokedexController.findOptimalBuild);

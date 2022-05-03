@@ -1,5 +1,7 @@
 /* eslint-disable */
+//@todo Enable lint when refactoring is finished
 
+import e from 'express';
 import app from '../index.js';
 import * as pokeApiService from './pokeApiService.js';
 import * as showdownService from './showdownService.js';
@@ -1030,6 +1032,7 @@ export async function findOptimalBuild(build, format, params) {
       accuracyTolerance: #,
       contact: 'any' || 'force' || 'omit',
       recoil: 'any', || 'force' || 'omit',
+      selfDebuff: 'any' || 'omit',
       minPP: #,
       ignoreList: ['']
     },
@@ -1048,7 +1051,7 @@ export async function findOptimalBuild(build, format, params) {
   //Check if build.moves.length >= 4
   //If yes, return current build.
   //If no, continue.
-  let dataSet = GetDataSet(build, format, params);
+  let dataSet = await GetDataSet(build, format, params);
   build = dataSet.build;
   let allMoves = dataSet.legalMoves;
   let enemies = dataSet.enemies;
@@ -1058,8 +1061,34 @@ export async function findOptimalBuild(build, format, params) {
   //- Remove all moves that do not match provided parameters
   //- Remove moves that are objectively worse than another existing move
   //- Also remove status moves from current build.
+  allMoves = trimMoves(allMoves, build, format.gen, params.moves);
 
   //Create & Test Sets recursively
+}
+
+function trimMoves(moveList, build, gen, params) {
+  /*Remove all status, charge, and self destruct moves.
+   */
+  moveList = moveList.filter(
+    m =>
+      !(m.move.data.category == 'Status') &&
+      !m.move.data.flags.charge &&
+      !m.move.data.selfdestruct
+  );
+
+  moveList.forEach(move => {
+    if (move.move.name == 'overheat') {
+      console.log();
+    }
+  });
+
+  //Filter by params.
+  if (params.contact == 'omit') {
+    moveList = moveList.filter(m => !m.move.data.flags.contact);
+  }
+  if (params.recoil == 'omit') {
+    moveList = moveList.filter(m => !m.move.data.flags.recoil);
+  }
 }
 
 async function GetDataSet(build, format, params) {
@@ -1073,7 +1102,8 @@ async function GetDataSet(build, format, params) {
   build.Data = pokemonData;
   build.Types = app.data.pokedex[normalizeString(build.Pokemon)].types;
 
-  //Construct Final Stats (Factor items and abilities, like Flare Boost)
+  //Construct and augment Final Stats (Factor items and abilities, like Flare Boost)
+  build = CalculateStats(build, format);
 
   //Get moves
   let moves = await GetMoves(build, format);
@@ -1081,8 +1111,218 @@ async function GetDataSet(build, format, params) {
   let legalMoves = moves.legalMoves;
 
   //Get enemies
-  let enemies = GetEnemies(format, params);
+  let enemies = await GetEnemies(format, params);
   return { build: build, legalMoves: legalMoves, enemies: enemies };
+}
+
+function convertStatShorthand(statString) {
+  switch (statString) {
+    case 'HP':
+      return 'HP';
+    case 'Atk':
+      return 'attack';
+    case 'Def':
+      return 'defense';
+    case 'SpA':
+      return 'special-attack';
+    case 'SpD':
+      return 'special-defense';
+    case 'Spe':
+      return 'speed';
+  }
+}
+
+function CalculateStats(build, format) {
+  console.log('test');
+  //Declare Stats
+  build.Stats = {};
+
+  //Get stats
+  let stats = Object.keys(build.EVs);
+
+  stats.forEach(stat => {
+    //Get base stats
+    let baseStatValue = build.Data.stats.filter(
+      buildStat =>
+        normalizeString(buildStat.stat.name) ==
+        normalizeString(convertStatShorthand(stat))
+    )[0].base_stat;
+    //Stats are calculated differently in gens 1 and 2
+    //@todo Write gen 1 and 2 stat calculations
+    if (format.gen < 3) {
+      //HP is calculated differently from all other stats
+    } else {
+      //HP is calculated differently from all other stats
+      if (stat == 'HP') {
+        build.Stats[stat] =
+          ((2 * baseStatValue + build.IVs[stat] + build.EVs[stat] / 4) *
+            build.Level) /
+            100 +
+          build.Level +
+          10;
+      } else {
+        build.Stats[stat] =
+          ((2 * baseStatValue + build.IVs[stat] + build.EVs[stat] / 4) *
+            build.Level) /
+            100 +
+          5;
+      }
+    }
+  });
+
+  //Factor in the pokemon's Nature. Natures only began to impact stats in HeartGold + SoulSilver, which was gen 4.
+  if (format.gen > 3) {
+    switch (build.Nature) {
+      case 'Hardy':
+        break;
+      case 'Lonely':
+        build.Stats.Atk = Math.trunc(build.Stats.Atk * 1.1);
+        build.Stats.Def = Math.trunc(build.Stats.Def * 0.9);
+        break;
+      case 'Brave':
+        build.Stats.Atk = Math.trunc(build.Stats.Atk * 1.1);
+        build.Stats.Spe = Math.trunc(build.Stats.Spe * 0.9);
+        break;
+      case 'Adamant':
+        build.Stats.Atk = Math.trunc(build.Stats.Atk * 1.1);
+        build.Stats.SpA = Math.trunc(build.Stats.SpA * 0.9);
+        break;
+      case 'Naughty':
+        build.Stats.Atk = Math.trunc(build.Stats.Atk * 1.1);
+        build.Stats.SpD = Math.trunc(build.Stats.SpD * 0.9);
+        break;
+      case 'Bold':
+        build.Stats.Def = Math.trunc(build.Stats.Def * 1.1);
+        build.Stats.Atk = Math.trunc(build.Stats.Atk * 0.9);
+        break;
+      case 'Docile':
+        break;
+      case 'Relaxed':
+        build.Stats.Def = Math.trunc(build.Stats.Def * 1.1);
+        build.Stats.Spe = Math.trunc(build.Stats.Spe * 0.9);
+        break;
+      case 'Impish':
+        build.Stats.Def = Math.trunc(build.Stats.Def * 1.1);
+        build.Stats.SpA = Math.trunc(build.Stats.SpA * 0.9);
+        break;
+      case 'Lax':
+        build.Stats.Def = Math.trunc(build.Stats.Def * 1.1);
+        build.Stats.SpD = Math.trunc(build.Stats.Spd * 0.9);
+        break;
+      case 'Timid':
+        build.Stats.Spe = Math.trunc(build.Stats.Spe * 1.1);
+        build.Stats.Atk = Math.trunc(build.Stats.Atk * 0.9);
+        break;
+      case 'Hasty':
+        build.Stats.Spe = Math.trunc(build.Stats.Spe * 1.1);
+        build.Stats.Def = Math.trunc(build.Stats.Def * 0.9);
+        break;
+      case 'Serious':
+        break;
+      case 'Jolly':
+        build.Stats.Spe = Math.trunc(build.Stats.Spe * 1.1);
+        build.Stats.SpA = Math.trunc(build.Stats.SpA * 0.9);
+        break;
+      case 'Naive':
+        build.Stats.Spe = Math.trunc(build.Stats.Spe * 1.1);
+        build.Stats.SpD = Math.trunc(build.Stats.SpD * 0.9);
+        break;
+      case 'Modest':
+        build.Stats.SpA = Math.trunc(build.Stats.SpA * 1.1);
+        build.Stats.Atk = Math.trunc(build.Stats.Atk * 0.9);
+        break;
+      case 'Mild':
+        build.Stats.SpA = Math.trunc(build.Stats.SpA * 1.1);
+        build.Stats.Def = Math.trunc(build.Stats.Def * 0.9);
+        break;
+      case 'Quiet':
+        build.Stats.SpA = Math.trunc(build.Stats.SpA * 1.1);
+        build.Stats.Spe = Math.trunc(build.Stats.Spe * 0.9);
+        break;
+      case 'Bashful':
+        break;
+      case 'Rash':
+        build.Stats.SpA = Math.trunc(build.Stats.SpA * 1.1);
+        build.Stats.SpD = Math.trunc(build.Stats.SpD * 0.9);
+        break;
+      case 'Calm':
+        build.Stats.SpD = Math.trunc(build.Stats.SpD * 1.1);
+        build.Stats.Atk = Math.trunc(build.Stats.Atk * 0.9);
+        break;
+      case 'Gentle':
+        build.Stats.SpD = Math.trunc(build.Stats.SpD * 1.1);
+        build.Stats.Def = Math.trunc(build.Stats.Def * 0.9);
+        break;
+      case 'Sassy':
+        build.Stats.SpD = Math.trunc(build.Stats.SpD * 1.1);
+        build.Stats.Spe = Math.trunc(build.Stats.Spe * 0.9);
+        break;
+      case 'Careful':
+        build.Stats.SpD = Math.trunc(build.Stats.SpD * 1.1);
+        build.Stats.SpA = Math.trunc(build.Stats.SpA * 0.9);
+        break;
+      case 'Quirky':
+        break;
+    }
+  }
+
+  //Factor in items
+  switch (build.Item) {
+    //#region Choice Items
+    case 'Choice Band':
+      build.Stats.Atk *= 1.5;
+      break;
+    case 'Choice Specs':
+      build.Stats.SpA *= 1.5;
+      break;
+    case 'Choice Scarf':
+      build.Stats.Spe *= 1.5;
+      break;
+    //#endregion
+    case 'Assault Vest':
+      build.Stats.SpD *= 1.5;
+      break;
+    case 'Deep Sea Scale':
+      if (build.Pokemon == 'Clamperl') {
+        build.Stats.SpD *= 2;
+      }
+      break;
+    case 'Deep Sea Tooth':
+      if (build.Pokemon == 'Clamperl') {
+        build.Stats.SpA *= 2;
+      }
+      break;
+    case 'Eviolite':
+      //@todo Eviolite
+      break;
+    case 'Light Ball':
+      if (build.Pokemon == 'Pikachu') {
+        //In gen 2 & 3 light ball only doubles SpA, in later gens it doubles both attack stats.
+        if (format.gen < 4) {
+          build.Stats.SpA *= 2;
+        } else {
+          build.Stats.SpA *= 2;
+          build.Stats.Atk *= 2;
+        }
+      }
+      break;
+    case 'Thick Club':
+      if (build.Pokemon == 'Cubone' || build.Pokemon == 'Marowak') {
+        build.Stats.Atk *= 2;
+      }
+      break;
+  }
+
+  //"In Gold, Silver, and Crystal, if a Pokémon's stat reaches 1024 or higher (such as due to a held Thick Club), it will be reduced to its value modulo 1024." - Bulbapedia
+  if (format.gen == 2) {
+    stats.forEach(stat => {
+      if (build.Stats[stat] >= 1024) {
+        build.Stats[stat] = build.Stats[stat] % 1024;
+      }
+    });
+  }
+
+  return build;
 }
 
 async function GetMoves(build, format) {
@@ -1735,6 +1975,23 @@ async function GetMoves(build, format) {
     //Augment effectiveness
     move.data.baseEffectiveness = baseEffectiveness;
 
+    /*If the move is Beat Up we'll need to set its base power.
+    Beat Up is a really weird move. It hits once for each pokemon on your team,
+    And the base power of each hit is determined by the base attack stat of that pokemon.
+    It is then modified by the main pokemon's attack stat (the one using Beat Up),
+    And can be amplified by STAB, items, and stat changes.
+
+    For now we're going to use averages. The average attack stat across all pokemon is 75.
+    We'll use your current pokemon's base attack stat for one hit, and then 75 for all the others.
+    */
+    if (move.name == 'beatup') {
+      //Get current pokemon's base attack stat.
+      let baseAttack = build.Data.stats[1].base_stat;
+      let total = baseAttack / 10 + 5 + (75 / 10 + 5) * 5;
+      move.data.multihit = 6;
+      move.data.basePower = total / 6;
+    }
+
     //Check if the pokeBuild is using that move and add to buildMoves if it is.
     if (buildMoves.some(buildMove => buildMove == moveData.name)) {
       build.Moves.push(move);
@@ -1744,9 +2001,15 @@ async function GetMoves(build, format) {
   return { build: build, legalMoves: legalMoves };
 }
 
-function GetEnemies(format, params) {
+function calculateMoveAverageDamage(build, move) {}
+
+async function GetEnemies(format, params) {
   let enemies = [];
   //Get a list of all enemies that exist in this format
+  let metagame = await showdownService.getMetagame(
+    'gen' + format.gen + format.tier
+  );
+  metagame = metagame.pokemon;
   //Trim list by params.enemies
   //Return list
   return enemies;

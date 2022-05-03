@@ -41,6 +41,38 @@ export async function getOffensiveMatchups(req, res) {
   res.send(results);
 }
 
+export async function findOptimalBuild(req, res) {
+  console.log(req);
+  let params = {
+    compareMethod: 'less bad',
+    fieldEffects: {
+      weather: '',
+      terrain: ''
+    },
+    moves: {
+      STAB: 'any',
+      stats: 'considered',
+      priority: 'any',
+      accuracyTolerance: 90,
+      contact: 'omit',
+      recoil: 'any',
+      minPP: 0,
+      ignoreList: []
+    },
+    enemies: {
+      nfe: 'exclude',
+      topX: 0
+    }
+  };
+  let results = await pokedexService.findOptimalBuild(
+    req.body,
+    req.query.format,
+    params
+  );
+  console.log(results);
+  res.send(results);
+}
+
 export async function getPokemonMoves(req, res) {
   try {
     let results = await pokedexService.getFilteredMoveList(
