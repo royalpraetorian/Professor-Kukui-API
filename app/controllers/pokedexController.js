@@ -46,8 +46,8 @@ export async function findOptimalBuild(req, res) {
   let params = {
     compareMethod: 'less bad',
     fieldEffects: {
-      weather: '',
-      terrain: ''
+      weather: 'None',
+      terrain: 'None'
     },
     moves: {
       STAB: 'any',
@@ -55,9 +55,12 @@ export async function findOptimalBuild(req, res) {
       priority: 'any',
       accuracyTolerance: 90,
       contact: 'omit',
-      recoil: 'any',
-      minPP: 0,
-      ignoreList: []
+      recoil: 'omit',
+      selfDebuffing: 'omit',
+      selfTrapping: 'omit',
+      switching: 'omit',
+      minPP: 10,
+      ignoreList: ['Ice Beam', 'Flamethrower']
     },
     enemies: {
       nfe: 'exclude',
