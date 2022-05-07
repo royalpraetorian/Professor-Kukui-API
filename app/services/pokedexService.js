@@ -468,332 +468,341 @@ function normalizeString(input) {
   return input;
 }
 
+// function checkMoveEffectiveness(
+//   move,
+//   attacker,
+//   defender,
+//   format,
+//   weather = 'none',
+//   terrain = 'none'
+// ) {
+//   //Effectiveness is calculated beginning at 1
+//   let effectiveness = 1;
+
+//   //We'll be using this a lot so let's shorten it a little.
+//   let defenderTypes = defender.types;
+
+//   /*Check if the user is using flying-press.
+//   Flying press is the only multi-type attack in the game.
+//   As such it must be treated specially.
+//   */
+
+//   //@todo Check Weather ball and
+
+//   //@todo Check for Aerilate, etc, which change move type. Possibly do this at a higher level to reduce calculations?
+
+//   //Check if the defender is multi-type
+//   if (defenderTypes.length == 1) {
+//     if (
+//       defenderTypes[0] == 'Ghost' &&
+//       (move.type == 'Normal' || move.type == 'Fighting') &&
+//       monHasAbility(attacker, 'Scrappy')
+//     ) {
+//       effectiveness *= 1;
+//     } else {
+//       effectiveness *= checkTypeEffectiveness(
+//         move.type,
+//         defenderTypes[0],
+//         format.gen
+//       );
+//     }
+//   } else {
+//     //For each type the pokemon has, multiply effectiveness by theresult of checkEffectiveness()
+//     defenderTypes.forEach(type => {
+//       if (
+//         type == 'Ghost' &&
+//         (move.type == 'Normal' || move.type == 'Fighting') &&
+//         monHasAbility(attacker, 'Scrappy')
+//       ) {
+//         effectiveness *= 1;
+//       } else {
+//         effectiveness *= checkTypeEffectiveness(move.type, type, format.gen);
+//       }
+//     });
+
+//     /*Immediately after effectiveness has been checked, check for certain super-effective clauses.
+//     Expert belt multiplies super-effective damage by 1.2x, for example, and we can only reliably check if a pokemon is super-effected
+//     By a move before we have applied any other modifiers.
+//     */
+//     if (effectiveness >= 2) {
+//       if (
+//         monHasAbility(defender, 'Wonder Guard') &&
+//         !monHasAbility(attacker, 'Mold Breaker')
+//       ) {
+//         return 0;
+//       }
+//       if (attacker.Item == 'Expert Belt') {
+//         effectiveness *= 1.2;
+//       }
+//       if (monHasAbility(defender, 'Prism Armor')) {
+//         effectiveness *= 0.75;
+//       } else if (
+//         (monHasAbility(defender, 'Filter') ||
+//           monHasAbility(defender, 'Solid Rock')) &&
+//         !monHasAbilities(attacker, ['Mold Breaker', 'Teravolt', 'Turboblaze'])
+//       ) {
+//         effectiveness *= 0.75;
+//       }
+//     }
+//   }
+
+//   //@todo Check weather effects
+//   switch (weather) {
+//     case 'Harsh Sunlight':
+//       switch (move.type) {
+//         case 'Fire':
+//           effectiveness *= 1.5;
+//           break;
+//         case 'Water':
+//           effectiveness *= 0.5;
+//           break;
+//       }
+//       break;
+//     case 'Extremely Harsh Sunlight':
+//       switch (move.type) {
+//         case 'Fire':
+//           effectiveness *= 1.5;
+//           break;
+//         case 'Water':
+//           return 0;
+//       }
+//       break;
+//     case 'Rain':
+//       switch (move.type) {
+//         case 'Water':
+//           effectiveness *= 1.5;
+//           break;
+//         case 'Fire':
+//           effectiveness *= 0.5;
+//           break;
+//         case 'Grass':
+//           if (move.Name == 'Solar Beam' || move.Name == 'Solar Blade') {
+//             effectiveness *= 0.5;
+//           }
+//           break;
+//       }
+//       break;
+//     case 'Heavy Rain':
+//       break;
+//     case 'Sandstorm':
+//       break;
+//     case 'Hail':
+//       break;
+//     case 'Shadowy Aura':
+//       break;
+//     case 'Fog':
+//       break;
+//     case 'Strong Winds':
+//       break;
+//     default:
+//       break;
+//   }
+
+//   //@todo Check for damage increasing abilities on the attacker.
+//   switch (attacker.Ability) {
+//     case 'Iron Fist':
+//       if (move.flags.punch == 1) {
+//         effectiveness *= 1.2;
+//       }
+//       break;
+//     default:
+//       break;
+//   }
+
+//   //Set critical hit flag for use later.
+//   let criticalHit = false;
+
+//   switch (terrain) {
+//     default:
+//       break;
+//   }
+
+//   //If the defender has psychic surge we can't reliably hit it with priority moves.
+//   //This is true even if we have Mold Breaker, so we check before Mold Breaker.
+//   if (move.flags.priority == 1 && monHasAbility(defender, 'Psychcic Surge')) {
+//     effectiveness *= 0;
+//   }
+
+//   //@todo Figure out if I want to factor in weight for moves like Low Kick. If so, consider Heavy Metal and Light Metal perhaps?
+
+//   //Some checks to run that will return 0 automatically if the attacker does not have Mold Breaker, saving us some calculations.
+//   if (!monHasAbilities(attacker, ['Mold Breaker', 'Teravolt', 'Turboblaze'])) {
+//     /*Switches are more effecient than if statements
+//     //I coded these in the order they show up on the bulbapedia entry for Mold Breaker
+//     They are ordered to assume the worst case. For example, when checking fire-type moves, we check for Flash Fire first,
+//     As that has a 0x multiplier. Then we check for Heatproof, as that has a 0.5x multiplier. Then we check for Dry Skin,
+//     As that will actually increase our damage. We want to be as cautious as possible, just in case a pokemon has all three.
+//     Factoring multiple abilities into our math will become nonsense very quickly, so since we can only assume one,
+//     We want to assume the worst. This also saves a tiny amount of processing time.
+//     */
+
+//     if (monHasAbility(defender, 'Fluffy') && move.flags.contact == 1) {
+//       effectiveness *= 0.5;
+//     }
+
+//     if (
+//       move.flags.priority == 1 &&
+//       monHasAbilities(defender, 'Queenly Majesty', 'Dazzling')
+//     ) {
+//       effectiveness *= 0;
+//     }
+
+//     //@todo Consider redoing this as a switch on defender ability, to save processes.
+//     //@todo only apply positive buffs if it is the only ability the defender has.
+//     switch (move.type) {
+//       case 'Water':
+//         if (monHasAbility(defender, 'Dry Skin')) {
+//           return 0;
+//         } else if (monHasAbility(defender, 'Storm Drain')) {
+//           return 0;
+//         } else if (monHasAbility(defender, 'Water Absorb')) {
+//           return 0;
+//         }
+//         break;
+//       case 'Fire':
+//         if (monHasAbility(defender, 'Flash Fire')) {
+//           return 0;
+//         } else if (monHasAbility(defender, 'Heatproof')) {
+//           effectiveness *= 0.5;
+//         } else if (monHasAbility(defender, 'Water Bubble')) {
+//           effectiveness *= 0.5;
+//         } else if (monHasAbility(defender, 'Thick Fat')) {
+//           effectiveness *= 0.5;
+//         } else if (
+//           monHasAbility(defender, 'Dry Skin') &&
+//           defender.abilities.length == 1
+//         ) {
+//           //Only factor positives if they are guranteed.
+//           effectiveness *= 1.25;
+//         } else if (
+//           monHasAbility(defender, 'Fluffy') &&
+//           defender.abilities.length == 1
+//         ) {
+//           //Only factor positives if they are guranteed.
+//           effectiveness *= 2;
+//         }
+//         break;
+//       case 'Ground':
+//         if (monHasAbility(defender, 'Levitate')) {
+//           return 0;
+//         }
+//         break;
+//       case 'Electric':
+//         if (monHasAbility(defender, 'Lightning Rod')) {
+//           return 0;
+//         } else if (monHasAbility(defender, 'Motor Drive')) {
+//           return 0;
+//         } else if (monHasAbility(defender, 'Volt Absorb')) {
+//           return 0;
+//         }
+//         break;
+//       case 'Ice':
+//         if (monHasAbility(defender, 'Thick Fat')) {
+//           effectiveness *= 0.5;
+//         }
+//         break;
+//       case 'Grass':
+//         if (monHasAbility(defender, 'Sap Sipper')) {
+//           return 0;
+//         }
+//         break;
+//       default:
+//         break;
+//     }
+
+//     if (monHasAbility(defender, 'Bulletproof') && move.flags.bullet == 1) {
+//       return 0;
+//     }
+//     if (monHasAbility(defender, 'Soundproof') && move.flags.sound == 1) {
+//       return 0;
+//     }
+//   }
+
+//   //Critical strike check for moves like Surging Strikes
+//   if (move.willCrit) {
+//     if (
+//       !monHasAbilities(defender, ['Shell Armor', 'Battle Armor']) ||
+//       monHasAbilities(attacker, 'Mold Breaker')
+//     ) {
+//       //The move is a critical hit, but the damage calculations are based on generation.
+//       criticalHit = true;
+//       if (format.gen == 1) {
+//         effectiveness *= (2 * attacker.Level + 5) / (attacker.Level + 5);
+//       } else if (format.gen > 1 && format.gen < 6) {
+//         effectiveness *= 2;
+//       } else {
+//         effectiveness *= 1.5;
+//       }
+
+//       //Additionally, pokemon with the Sniper ability get another 1.5x multiplier
+//       if (monHasAbility(attacker, 'Sniper')) {
+//         effectiveness *= 1.5;
+//       }
+//     }
+//   }
+
+//   //@todo Check for guranteed criticals from +3 or higher stages of critical increase
+
+//   /*Check if the move gets Same Type Attack Bonus (STAB) and, if so, multiply effectiveness by 1.5x
+//   A move gets STAB if it is the same type as the pokemon using it.
+//   If the pokemon has Adaptibility as its ability, the move gets 2x instead of 1.5x.
+//   First check if a pokemon has Protean or Libero, which will give all of its moves STAB.
+//   */
+//   if (monHasAbilities(attacker, ['Protean', 'Libero'])) {
+//     effectiveness *= 1.5;
+//   } else if (attacker.Types.includes(move.type)) {
+//     if (attacker.Ability == 'Adaptability') {
+//       effectiveness *= 2;
+//     } else {
+//       effectiveness *= 1.5;
+//     }
+//   }
+
+//   //If the attacker has Water Bubble, its water type moves deal 2x damage
+//   if (attacker.Ability == 'Water Bubble' && move.type == 'Water') {
+//     effectiveness *= 2;
+//   }
+
+//   //Check for Ice Scales
+//   if (monHasAbility(defender, 'Ice Scales') && move.category == 'Special') {
+//     effectiveness *= 0.5;
+//   }
+
+//   //Check for stat dropping abilities like Intimidate
+//   if (
+//     monHasAbility(defender, 'Intimidate') &&
+//     !criticalHit &&
+//     move.category == 'Physical' &&
+//     !monHasAbilities(attacker, [
+//       'Hyper Cutter',
+//       'Clear Body',
+//       'White Smoke',
+//       'Full Metal Body',
+//       'Inner Focus',
+//       'Oblivious',
+//       'Scrappy',
+//       'Own Tempo'
+//     ])
+//   ) {
+//     //Stat stages work differently by generation
+//     if (format.gen < 3) {
+//       effectiveness *= 66 / 100;
+//     } else {
+//       effectiveness *= 2 / 3;
+//     }
+//   }
+
+//   return effectiveness;
+// }
+
 function checkMoveEffectiveness(
   move,
-  attacker,
-  defender,
-  format,
-  weather = 'none',
-  terrain = 'none'
-) {
-  //Effectiveness is calculated beginning at 1
-  let effectiveness = 1;
-
-  //We'll be using this a lot so let's shorten it a little.
-  let defenderTypes = defender.types;
-
-  /*Check if the user is using flying-press.
-  Flying press is the only multi-type attack in the game.
-  As such it must be treated specially.
-  */
-
-  //@todo Check Weather ball and
-
-  //@todo Check for Aerilate, etc, which change move type. Possibly do this at a higher level to reduce calculations?
-
-  //Check if the defender is multi-type
-  if (defenderTypes.length == 1) {
-    if (
-      defenderTypes[0] == 'Ghost' &&
-      (move.type == 'Normal' || move.type == 'Fighting') &&
-      monHasAbility(attacker, 'Scrappy')
-    ) {
-      effectiveness *= 1;
-    } else {
-      effectiveness *= checkTypeEffectiveness(
-        move.type,
-        defenderTypes[0],
-        format.gen
-      );
-    }
-  } else {
-    //For each type the pokemon has, multiply effectiveness by theresult of checkEffectiveness()
-    defenderTypes.forEach(type => {
-      if (
-        type == 'Ghost' &&
-        (move.type == 'Normal' || move.type == 'Fighting') &&
-        monHasAbility(attacker, 'Scrappy')
-      ) {
-        effectiveness *= 1;
-      } else {
-        effectiveness *= checkTypeEffectiveness(move.type, type, format.gen);
-      }
-    });
-
-    /*Immediately after effectiveness has been checked, check for certain super-effective clauses.
-    Expert belt multiplies super-effective damage by 1.2x, for example, and we can only reliably check if a pokemon is super-effected
-    By a move before we have applied any other modifiers.
-    */
-    if (effectiveness >= 2) {
-      if (
-        monHasAbility(defender, 'Wonder Guard') &&
-        !monHasAbility(attacker, 'Mold Breaker')
-      ) {
-        return 0;
-      }
-      if (attacker.Item == 'Expert Belt') {
-        effectiveness *= 1.2;
-      }
-      if (monHasAbility(defender, 'Prism Armor')) {
-        effectiveness *= 0.75;
-      } else if (
-        (monHasAbility(defender, 'Filter') ||
-          monHasAbility(defender, 'Solid Rock')) &&
-        !monHasAbilities(attacker, ['Mold Breaker', 'Teravolt', 'Turboblaze'])
-      ) {
-        effectiveness *= 0.75;
-      }
-    }
-  }
-
-  //@todo Check weather effects
-  switch (weather) {
-    case 'Harsh Sunlight':
-      switch (move.type) {
-        case 'Fire':
-          effectiveness *= 1.5;
-          break;
-        case 'Water':
-          effectiveness *= 0.5;
-          break;
-      }
-      break;
-    case 'Extremely Harsh Sunlight':
-      switch (move.type) {
-        case 'Fire':
-          effectiveness *= 1.5;
-          break;
-        case 'Water':
-          return 0;
-      }
-      break;
-    case 'Rain':
-      switch (move.type) {
-        case 'Water':
-          effectiveness *= 1.5;
-          break;
-        case 'Fire':
-          effectiveness *= 0.5;
-          break;
-        case 'Grass':
-          if (move.Name == 'Solar Beam' || move.Name == 'Solar Blade') {
-            effectiveness *= 0.5;
-          }
-          break;
-      }
-      break;
-    case 'Heavy Rain':
-      break;
-    case 'Sandstorm':
-      break;
-    case 'Hail':
-      break;
-    case 'Shadowy Aura':
-      break;
-    case 'Fog':
-      break;
-    case 'Strong Winds':
-      break;
-    default:
-      break;
-  }
-
-  //@todo Check for damage increasing abilities on the attacker.
-  switch (attacker.Ability) {
-    case 'Iron Fist':
-      if (move.flags.punch == 1) {
-        effectiveness *= 1.2;
-      }
-      break;
-    default:
-      break;
-  }
-
-  //Set critical hit flag for use later.
-  let criticalHit = false;
-
-  switch (terrain) {
-    default:
-      break;
-  }
-
-  //If the defender has psychic surge we can't reliably hit it with priority moves.
-  //This is true even if we have Mold Breaker, so we check before Mold Breaker.
-  if (move.flags.priority == 1 && monHasAbility(defender, 'Psychcic Surge')) {
-    effectiveness *= 0;
-  }
-
-  //@todo Figure out if I want to factor in weight for moves like Low Kick. If so, consider Heavy Metal and Light Metal perhaps?
-
-  //Some checks to run that will return 0 automatically if the attacker does not have Mold Breaker, saving us some calculations.
-  if (!monHasAbilities(attacker, ['Mold Breaker', 'Teravolt', 'Turboblaze'])) {
-    /*Switches are more effecient than if statements
-    //I coded these in the order they show up on the bulbapedia entry for Mold Breaker
-    They are ordered to assume the worst case. For example, when checking fire-type moves, we check for Flash Fire first,
-    As that has a 0x multiplier. Then we check for Heatproof, as that has a 0.5x multiplier. Then we check for Dry Skin,
-    As that will actually increase our damage. We want to be as cautious as possible, just in case a pokemon has all three.
-    Factoring multiple abilities into our math will become nonsense very quickly, so since we can only assume one,
-    We want to assume the worst. This also saves a tiny amount of processing time.
-    */
-
-    if (monHasAbility(defender, 'Fluffy') && move.flags.contact == 1) {
-      effectiveness *= 0.5;
-    }
-
-    if (
-      move.flags.priority == 1 &&
-      monHasAbilities(defender, 'Queenly Majesty', 'Dazzling')
-    ) {
-      effectiveness *= 0;
-    }
-
-    //@todo Consider redoing this as a switch on defender ability, to save processes.
-    //@todo only apply positive buffs if it is the only ability the defender has.
-    switch (move.type) {
-      case 'Water':
-        if (monHasAbility(defender, 'Dry Skin')) {
-          return 0;
-        } else if (monHasAbility(defender, 'Storm Drain')) {
-          return 0;
-        } else if (monHasAbility(defender, 'Water Absorb')) {
-          return 0;
-        }
-        break;
-      case 'Fire':
-        if (monHasAbility(defender, 'Flash Fire')) {
-          return 0;
-        } else if (monHasAbility(defender, 'Heatproof')) {
-          effectiveness *= 0.5;
-        } else if (monHasAbility(defender, 'Water Bubble')) {
-          effectiveness *= 0.5;
-        } else if (monHasAbility(defender, 'Thick Fat')) {
-          effectiveness *= 0.5;
-        } else if (
-          monHasAbility(defender, 'Dry Skin') &&
-          defender.abilities.length == 1
-        ) {
-          //Only factor positives if they are guranteed.
-          effectiveness *= 1.25;
-        } else if (
-          monHasAbility(defender, 'Fluffy') &&
-          defender.abilities.length == 1
-        ) {
-          //Only factor positives if they are guranteed.
-          effectiveness *= 2;
-        }
-        break;
-      case 'Ground':
-        if (monHasAbility(defender, 'Levitate')) {
-          return 0;
-        }
-        break;
-      case 'Electric':
-        if (monHasAbility(defender, 'Lightning Rod')) {
-          return 0;
-        } else if (monHasAbility(defender, 'Motor Drive')) {
-          return 0;
-        } else if (monHasAbility(defender, 'Volt Absorb')) {
-          return 0;
-        }
-        break;
-      case 'Ice':
-        if (monHasAbility(defender, 'Thick Fat')) {
-          effectiveness *= 0.5;
-        }
-        break;
-      case 'Grass':
-        if (monHasAbility(defender, 'Sap Sipper')) {
-          return 0;
-        }
-        break;
-      default:
-        break;
-    }
-
-    if (monHasAbility(defender, 'Bulletproof') && move.flags.bullet == 1) {
-      return 0;
-    }
-    if (monHasAbility(defender, 'Soundproof') && move.flags.sound == 1) {
-      return 0;
-    }
-  }
-
-  //Critical strike check for moves like Surging Strikes
-  if (move.willCrit) {
-    if (
-      !monHasAbilities(defender, ['Shell Armor', 'Battle Armor']) ||
-      monHasAbilities(attacker, 'Mold Breaker')
-    ) {
-      //The move is a critical hit, but the damage calculations are based on generation.
-      criticalHit = true;
-      if (format.gen == 1) {
-        effectiveness *= (2 * attacker.Level + 5) / (attacker.Level + 5);
-      } else if (format.gen > 1 && format.gen < 6) {
-        effectiveness *= 2;
-      } else {
-        effectiveness *= 1.5;
-      }
-
-      //Additionally, pokemon with the Sniper ability get another 1.5x multiplier
-      if (monHasAbility(attacker, 'Sniper')) {
-        effectiveness *= 1.5;
-      }
-    }
-  }
-
-  //@todo Check for guranteed criticals from +3 or higher stages of critical increase
-
-  /*Check if the move gets Same Type Attack Bonus (STAB) and, if so, multiply effectiveness by 1.5x
-  A move gets STAB if it is the same type as the pokemon using it.
-  If the pokemon has Adaptibility as its ability, the move gets 2x instead of 1.5x.
-  First check if a pokemon has Protean or Libero, which will give all of its moves STAB.
-  */
-  if (monHasAbilities(attacker, ['Protean', 'Libero'])) {
-    effectiveness *= 1.5;
-  } else if (attacker.Types.includes(move.type)) {
-    if (attacker.Ability == 'Adaptability') {
-      effectiveness *= 2;
-    } else {
-      effectiveness *= 1.5;
-    }
-  }
-
-  //If the attacker has Water Bubble, its water type moves deal 2x damage
-  if (attacker.Ability == 'Water Bubble' && move.type == 'Water') {
-    effectiveness *= 2;
-  }
-
-  //Check for Ice Scales
-  if (monHasAbility(defender, 'Ice Scales') && move.category == 'Special') {
-    effectiveness *= 0.5;
-  }
-
-  //Check for stat dropping abilities like Intimidate
-  if (
-    monHasAbility(defender, 'Intimidate') &&
-    !criticalHit &&
-    move.category == 'Physical' &&
-    !monHasAbilities(attacker, [
-      'Hyper Cutter',
-      'Clear Body',
-      'White Smoke',
-      'Full Metal Body',
-      'Inner Focus',
-      'Oblivious',
-      'Scrappy',
-      'Own Tempo'
-    ])
-  ) {
-    //Stat stages work differently by generation
-    if (format.gen < 3) {
-      effectiveness *= 66 / 100;
-    } else {
-      effectiveness *= 2 / 3;
-    }
-  }
-
-  return effectiveness;
-}
+  attackerBuild,
+  generation,
+  enemyBuild,
+  weather,
+  terrain
+) {}
 
 function checkTypeEffectiveness(attackType, defenseType, generation) {
   /*Types is indexed first by attacking type, then by defending type, and returns the damage multiplier.
@@ -1009,12 +1018,13 @@ function checkTypeEffectiveness(attackType, defenseType, generation) {
 
 //@todo Consider re-writing this to accept multiple abilities, for better optimization. Or write a new method that accepts multiples.
 function monHasAbilities(mon, abilities) {
+  let hasAbility = false;
   abilities.forEach(ability => {
     if (monHasAbility(mon, ability)) {
-      return true;
+      hasAbility = true;
     }
   });
-  return false;
+  return hasAbility;
 }
 
 function monHasAbility(mon, ability) {
@@ -1024,11 +1034,15 @@ function monHasAbility(mon, ability) {
     return normalizeString(mon.Ability) == normalizeString(ability);
   } else {
     //Pokemon is probably in dex format and has .abilities instead
+    //Get keys
+    let abilityKeys = Object.keys(mon.abilities);
     //Check if .abilities.length > 1
-    if (mon.abilities.length > 1) {
+    if (abilityKeys.length > 1) {
       //Check with .some
-      return mon.abilities.some(monAbility => {
-        normalizeString(monAbility) == normalizeString(ability);
+      return abilityKeys.some(monAbility => {
+        let monAbilityCheck = normalizeString(mon.abilities[monAbility]);
+        let checkAbility = normalizeString(ability);
+        return monAbilityCheck == checkAbility;
       });
     } else {
       //Check with index 0 ==
@@ -1085,9 +1099,426 @@ export async function findOptimalBuild(build, format, params) {
   //- Also remove status moves from current build.
   allMoves = trimMoves(allMoves, build, format.gen, params.moves);
 
-  //Calculate hits-to-kill of each move against each mon.
+  //Calculate hits-to-KO of each move against each mon.
 
   //Create all unique sets recursively and compare against the previous set.
+}
+
+export async function findFasterPokemon(speed, format) {
+  try {
+    format = parseFormat(format);
+  } catch (e) {
+    //Do nothing
+  }
+  //Get all pokemon in format.
+  let metagame = await showdownService.getMetagame(
+    'gen' + format.gen + format.tier
+  );
+  metagame = metagame.pokemon;
+
+  //What would a mon's base speed have to be to outspeed this one without the help of items or buffs?
+  let minBaseSpeedUnbuffed = Math.ceil(0.454545 * speed - 49.5);
+  //What about with choice scarf?
+  let minBaseSpeedScarfed = Math.ceil(0.30303 * speed - 49.5);
+  //What about with an ability that doubles speed?
+  let minBaseSpeedAbility = Math.ceil(0.227273 * speed - 49.5);
+
+  //Define return object
+  let results = {
+    Unscarfed: [],
+    Scarfed: [],
+    WithAbility: []
+  };
+  let pokemon = Object.keys(metagame);
+  pokemon.forEach(m => {
+    let pokemon = app.data.pokedex[normalizeString(m)];
+    let monSpeed = pokemon.baseStats.spe;
+    //Debug
+    if (m == 'Venusaur') {
+      console.log();
+    }
+    if (monSpeed > minBaseSpeedAbility) {
+      //If the pokemon's speed is lower than minBaseSpeedAbility, it has no chance. So it must be at least higher than that.
+      //If the pokemon's speed is greater than minBaseSpeedUnbuffed, it doesn't need any assistance to outspeed the threat.
+      if (monSpeed > minBaseSpeedUnbuffed) {
+        results.Unscarfed.push(m);
+      } else if (monSpeed > minBaseSpeedScarfed) {
+        //If the pokemon is fast enough that wearing a scarf can get it there, add it to the Scarfed array.
+        results.Scarfed.push(m);
+      } else if (
+        monSpeed > minBaseSpeedAbility &&
+        monHasAbilities(pokemon, [
+          'Swift Swim',
+          'Slush Rush',
+          'Sand Rush',
+          'Chlorophyll',
+          'Unburden',
+          'Surge Surfer'
+        ])
+      ) {
+        //If the pokemon has at least enough speed that doubling it will get it there, and it has one of these abilities, we add it to the final list.
+        results.WithAbility.push(m);
+      }
+    }
+  });
+
+  return results;
+}
+
+function calculateMoveDamage(
+  move,
+  attackerBuild,
+  generation,
+  enemyBuild,
+  weather,
+  terrain
+) {
+  //Define variables
+  let effectiveness = 1;
+  let minHitsToKO = 0;
+  let maxHitsToKO = 0;
+  let minDamage = 0;
+  let maxDamage = 0;
+
+  //Check enemy ability
+  switch (enemyBuild.Ability) {
+    //#region Weather
+    case 'Drought':
+      weather = 'Sun';
+      break;
+    case 'Drizzle':
+      weather = 'Rain';
+      break;
+    case 'Snow Warning':
+      weather = 'Hail';
+      break;
+    case 'Desolate Land':
+      weather = 'Harsh Sun';
+      break;
+    case 'Primordial Sea':
+      weather = 'Heavy Rain';
+      break;
+    case 'Sand Stream':
+      weather = 'Sand';
+      break;
+    case 'Delta Stream':
+      weather = 'Wind';
+      break;
+    case 'Cloud Nine':
+      weather = '';
+      break;
+    //#endregion
+    //#region Terrain
+    case 'Psychic Surge':
+      terrain = 'Psychic';
+      break;
+    case 'Grassy Surge':
+      terrain = 'Grassy';
+      break;
+    case 'Misty Surge':
+      terrain = 'Misty';
+      break;
+    case 'Electric Surge':
+      terrain = 'Electric';
+      break;
+    //#endregion
+    //#region Immunities & Resistances
+    //These are abilities which can make a pokemon immune or resistant to a move or a feature of a move, all of which can be ignored by Mold Breaker or its variants.
+    case 'Flash Fire':
+      if (
+        move.move.data.type == 'Fire' &&
+        !monIgnoresAbilities(attackerBuild) &&
+        move.move.data.ignoreAbility == false
+      ) {
+        return null;
+      }
+      break;
+    case 'Battle Armor':
+    case 'Shell Armor':
+      if (
+        !monIgnoresAbilities(attackerBuild) &&
+        move.move.data.ignoreAbility == false
+      ) {
+        move.move.data.willCrit = false;
+      }
+      break;
+    case 'Bulletproof':
+      if (
+        move.move.data.flags.bullet == true &&
+        !monIgnoresAbilities(attackerBuild) &&
+        move.move.data.ignoreAbility == false
+      ) {
+        return null;
+      }
+      break;
+    case 'Damp':
+      if (
+        move.move.data.selfdestruct == 'always' &&
+        !monIgnoresAbilities(attackerBuild) &&
+        move.move.data.ignoreAbility == false
+      ) {
+        return null;
+      }
+      break;
+    case 'Queenly Majesty':
+    case 'Dazzling':
+      if (
+        move.move.data.priority > 0 &&
+        !monIgnoresAbilities(attackerBuild) &&
+        move.move.data.ignoreAbility == false
+      ) {
+        return null;
+      }
+      break;
+    case 'Disguise':
+      if (
+        !monIgnoresAbilities(attackerBuild) &&
+        move.move.data.ignoreAbility == false
+      ) {
+        if (move.move.data.multihit != undefined) {
+          //If the move is multihit, we subtract one of its hits.
+          try {
+            move.move.data.multihit[0] -= 1;
+            move.move.data.multihit[1] -= 1;
+          } catch (e) {
+            move.move.data.multihit -= 1;
+          }
+        } else {
+          //If the move is not multi-hit, we add 1 to min and max hits to KO
+          minHitsToKO++;
+          maxHitsToKO++;
+        }
+      }
+      break;
+    case 'Dry Skin':
+      if (
+        !monIgnoresAbilities(attackerBuild) &&
+        move.move.data.ignoreAbility == false
+      ) {
+        if (move.move.data.type == 'Fire') {
+          effectiveness *= 1.25;
+        } else if (move.move.data.type == 'Water') {
+          return null;
+        }
+      }
+      break;
+    case 'Flower Gift':
+      if (
+        weather == 'Sun' &&
+        !monIgnoresAbilities(attackerBuild) &&
+        move.move.data.ignoreAbility == false
+      ) {
+        enemyBuild.Stats.SpA *= 1.5;
+      }
+      break;
+    case 'Fluffy':
+      if (
+        (move.move.data.type == 'Fire' || move.move.data.flags.contact) &&
+        !monIgnoresAbilities(attackerBuild) &&
+        move.move.data.ignoreAbility == false
+      ) {
+        if (move.move.data.type == 'Fire') {
+          effectiveness *= 2;
+        }
+        if (move.move.data.flags.contact) {
+          effectiveness *= 0.5;
+        }
+      }
+      break;
+    case 'Fur Coat':
+      if (
+        !monIgnoresAbilities(attackerBuild) &&
+        move.move.data.ignoreAbility == false
+      ) {
+        enemyBuild.Stats.Def *= 1.5;
+      }
+      break;
+    case 'Heatproof':
+      if (
+        move.move.data.type == 'Fire' &&
+        !monIgnoresAbilities(attackerBuild) &&
+        move.move.data.ignoreAbility == false
+      ) {
+        enemyBuild.Stats.SpA *= 1.5;
+      }
+      break;
+    case 'Heavy Metal':
+      if (
+        !monIgnoresAbilities(attackerBuild) &&
+        move.move.data.ignoreAbility == false
+      ) {
+        //@todo Double enemy's weight.
+      }
+      break;
+    case 'Ice Face':
+      if (
+        move.move.data.category == 'Physical' &&
+        !monIgnoresAbilities(attackerBuild) &&
+        move.move.data.ignoreAbility == false
+      ) {
+        if (move.move.data.multihit) {
+          try {
+            move.move.data.multihit[0]--;
+            move.move.data.multihit[1]--;
+          } catch (e) {
+            move.move.data.multihit--;
+          }
+        } else {
+          minHitsToKO++;
+          maxHitsToKO++;
+        }
+      }
+      break;
+    case 'Ice Scales':
+      if (
+        move.move.data.category == 'Special' &&
+        !monIgnoresAbilities(attackerBuild) &&
+        move.move.data.ignoreAbility == false
+      ) {
+        effectiveness *= 0.5;
+      }
+      break;
+    case 'Levitate':
+      if (
+        move.move.data.type == 'Ground' &&
+        !monIgnoresAbilities(attackerBuild) &&
+        move.move.data.ignoreAbility == false
+      ) {
+        return null;
+      }
+      break;
+    case 'Light Metal':
+      if (
+        !monIgnoresAbilities(attackerBuild) &&
+        move.move.data.ignoreAbility == false
+      ) {
+        //@todo halve weight.
+      }
+      break;
+    case 'Lightning Rod':
+    case 'Motor Drive':
+    case 'Volt Absorb':
+      if (
+        move.move.data.type == 'Electric' &&
+        !monIgnoresAbilities(attackerBuild) &&
+        move.move.data.ignoreAbility == false
+      ) {
+        return null;
+      }
+      break;
+    case 'Marvel Scale':
+      if (
+        move.move.data.category == 'Physical' &&
+        !monIgnoresAbilities(attackerBuild) &&
+        move.move.data.ignoreAbility == false
+      ) {
+        enemyBuild.Stats.Def *= 1.5;
+      }
+      break;
+    case 'Multiscale':
+      if (
+        !monIgnoresAbilities(attackerBuild) &&
+        move.move.data.ignoreAbility == false
+      ) {
+        //@todo How on earth am I going to do multiscale?
+        //Consider making this method recursive?
+      }
+      break;
+    case 'Punk Rock':
+      if (
+        move.move.data.flags.sound &&
+        !monIgnoresAbilities(attackerBuild) &&
+        move.move.data.ignoreAbility == false
+      ) {
+        effectiveness *= 0.5;
+      }
+      break;
+    case 'Sap Sipper':
+      if (
+        move.move.data.type == 'Grass' &&
+        !monIgnoresAbilities(attackerBuild) &&
+        move.move.data.ignoreAbility == false
+      ) {
+        return null;
+      }
+      break;
+    case 'Soundproof':
+      if (
+        move.move.data.flags.sound &&
+        !monIgnoresAbilities(attackerBuild) &&
+        move.move.data.ignoreAbility == false
+      ) {
+        return null;
+      }
+      break;
+    case 'Storm Drain':
+    case 'Water Absorb':
+      if (
+        move.move.data.type == 'Water' &&
+        !monIgnoresAbilities(attackerBuild) &&
+        move.move.data.ignoreAbility == false
+      ) {
+        return null;
+      }
+      break;
+    case 'Thick Fat':
+      if (
+        (move.move.data.type == 'Fire' || move.move.data.type == 'Ice') &&
+        !monIgnoresAbilities(attackerBuild) &&
+        move.move.data.ignoreAbility == false
+      ) {
+        effectiveness *= 0.5;
+      }
+      break;
+    case 'Water Bubble':
+      if (
+        move.move.data.type == 'Fire' &&
+        !monIgnoresAbilities(attackerBuild) &&
+        move.move.data.ignoreAbility == false
+      ) {
+        effectiveness *= 0.5;
+      }
+      break;
+    //#endregion
+    //#region Stat Changes
+    case 'Intimidate':
+      switch (attackerBuild.Ability) {
+        case 'Hyper Cutter':
+        case 'Clear Body':
+        case 'White Smoke':
+        case 'Full Metal Body':
+        case 'Inner Focus':
+        case 'Oblivious':
+        case 'Scrappy':
+        case 'Own Tempo':
+          //These abilities nullify intimidate, so we do nothing here.
+          break;
+        case 'Simple':
+          //Simple doubles stat stage changes, positively and negatively.
+          attackerBuild.StatStages.Atk -= 2;
+          break;
+        default:
+          attackerBuild.StatStages.Atk--;
+      }
+      break;
+    //#endregion
+  }
+
+  //Calculate effectiveness vs enemy pokemon
+
+  //Calculate min possible dmg.
+  //Calculate max possible dmg.
+
+  //@todo before returning, check for sturdy or focus sash.
+
+  return {
+    DamageRange: { min: minDamage, max: maxDamage },
+    hitsToKO: { min: minHitsToKO, max: maxHitsToKO }
+  };
+}
+
+function monIgnoresAbilities(build) {
+  return monHasAbilities(build, ['Mold Breaker', 'Teravolt', 'Turboblaze']);
 }
 
 function trimMoves(moveList, build, gen, params) {

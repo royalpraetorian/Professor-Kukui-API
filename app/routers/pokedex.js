@@ -11,3 +11,4 @@ pokedex.get(
   pokedexController.getOffensiveMatchups
 );
 pokedex.get('/pokemon/optimize', pokedexController.findOptimalBuild);
+pokedex.get('/pokemon/findFasterPokemon', pokedexController.findFasterPokemon);

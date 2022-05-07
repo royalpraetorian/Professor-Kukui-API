@@ -88,3 +88,11 @@ export async function getPokemonMoves(req, res) {
     console.log(e);
   }
 }
+
+export async function findFasterPokemon(req, res) {
+  let results = await pokedexService.findFasterPokemon(
+    req.query.speed,
+    req.query.format
+  );
+  res.send(results);
+}
