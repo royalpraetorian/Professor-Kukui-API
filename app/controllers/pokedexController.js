@@ -49,6 +49,14 @@ export async function findOptimalBuild(req, res) {
       weather: 'None',
       terrain: 'None'
     },
+    statStages: {
+      Atk: 0,
+      Def: 0,
+      SpA: 0,
+      SpD: 0,
+      Spe: 0
+    },
+    status: '',
     moves: {
       STAB: 'any',
       stats: 'considered',

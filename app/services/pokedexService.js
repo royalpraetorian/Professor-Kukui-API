@@ -1,6 +1,3 @@
-/* eslint-disable */
-//@todo Enable lint when refactoring is finished
-
 import app from '../index.js';
 import * as pokeApiService from './pokeApiService.js';
 import * as showdownService from './showdownService.js';
@@ -292,168 +289,168 @@ function parseFormat(format) {
 
 // function augmentMoves(filteredMoveList) {}
 
-export async function getOffenseMatchups(pokemonBuild, format) {
-  let data = GetDataSet(pokemonBuild, format, {});
-  //Get pokemon data about the pokemon from pokeAPI
-  let pokemonData = await pokeApiService.findPokemonByName(
-    pokemonBuild.Pokemon
-  );
+// export async function getOffenseMatchups(pokemonBuild, format) {
+//   let data = GetDataSet(pokemonBuild, format, {});
+//   //Get pokemon data about the pokemon from pokeAPI
+//   let pokemonData = await pokeApiService.findPokemonByName(
+//     pokemonBuild.Pokemon
+//   );
 
-  //Augment pokemonBuild with Types
-  pokemonBuild.Types =
-    app.data.pokedex[normalizeString(pokemonBuild.Pokemon)].types;
+//   //Augment pokemonBuild with Types
+//   pokemonBuild.Types =
+//     app.data.pokedex[normalizeString(pokemonBuild.Pokemon)].types;
 
-  //Discect format into generation and tier.
-  format = parseFormat(format); //We're going to mutate this an essentially augment it with .gen and .tier
+//   //Discect format into generation and tier.
+//   format = parseFormat(format); //We're going to mutate this an essentially augment it with .gen and .tier
 
-  //Get a list of the moves that pokemon is allowed to learn.
-  let res = await GetMoves(pokemonBuild, format.gen);
-  pokemonBuild = res.build;
-  let filteredMoveList = res.legalMoves;
+//   //Get a list of the moves that pokemon is allowed to learn.
+//   let res = await GetMoves(pokemonBuild, format.gen);
+//   pokemonBuild = res.build;
+//   let filteredMoveList = res.legalMoves;
 
-  let buildMoves = [];
+//   let buildMoves = [];
 
-  //Augment filteredMoveList with move data (type, power, accuracy, etc)
+//   //Augment filteredMoveList with move data (type, power, accuracy, etc)
 
-  filteredMoveList.forEach(filtMove => {
-    filtMove.move.name = normalizeString(filtMove.move.name); //Format to match keys in app.data.moves
-    let moveData = app.data.moves[filtMove.move.name]; //Get from app.data.moves cache.
-    filtMove.data = moveData; //Augment.
-    //Check if the pokeBuild is using that move and add to buildMoves if it is.
-    if (pokemonBuild.Moves.some(move => move == moveData.name)) {
-      buildMoves.push(moveData);
-    }
-  });
+//   filteredMoveList.forEach(filtMove => {
+//     filtMove.move.name = normalizeString(filtMove.move.name); //Format to match keys in app.data.moves
+//     let moveData = app.data.moves[filtMove.move.name]; //Get from app.data.moves cache.
+//     filtMove.data = moveData; //Augment.
+//     //Check if the pokeBuild is using that move and add to buildMoves if it is.
+//     if (pokemonBuild.Moves.some(move => move == moveData.name)) {
+//       buildMoves.push(moveData);
+//     }
+//   });
 
-  //Get a list of the pokemon in that format (tier + generation)
+//   //Get a list of the pokemon in that format (tier + generation)
 
-  let metagame = await showdownService.getMetagame(
-    'gen' + format.gen + format.tier
-  );
-  metagame = metagame.pokemon; //TODO: Cache this.
-  let pokemonInTier = Object.keys(metagame);
+//   let metagame = await showdownService.getMetagame(
+//     'gen' + format.gen + format.tier
+//   );
+//   metagame = metagame.pokemon; //TODO: Cache this.
+//   let pokemonInTier = Object.keys(metagame);
 
-  //Define matchup spread object
-  // let matchups = {
-  //   0: {
-  //     count: 0,
-  //     pokemon: []
-  //   },
-  //   0.25: {
-  //     count: 0,
-  //     pokemon: []
-  //   },
-  //   0.5: {
-  //     count: 0,
-  //     pokemon: []
-  //   },
-  //   1: {
-  //     count: 0,
-  //     pokemon: []
-  //   },
-  //   2: {
-  //     count: 0,
-  //     pokemon: []
-  //   },
-  //   4: {
-  //     count: 0,
-  //     pokemon: []
-  //   }
-  // };
+//   //Define matchup spread object
+//   // let matchups = {
+//   //   0: {
+//   //     count: 0,
+//   //     pokemon: []
+//   //   },
+//   //   0.25: {
+//   //     count: 0,
+//   //     pokemon: []
+//   //   },
+//   //   0.5: {
+//   //     count: 0,
+//   //     pokemon: []
+//   //   },
+//   //   1: {
+//   //     count: 0,
+//   //     pokemon: []
+//   //   },
+//   //   2: {
+//   //     count: 0,
+//   //     pokemon: []
+//   //   },
+//   //   4: {
+//   //     count: 0,
+//   //     pokemon: []
+//   //   }
+//   // };
 
-  //Define the set of enemy pokemon to check against.
-  let enemySet = {};
-  /*Narrow down pokemonInTier to only the mons we actually care about.
-  Remove all not-fully-evolved forms. This information is stored in our JSON object under a key called 'evos'
-  If a pokemon is fully evolved, the 'evos' key will not be present.
-  */
-  pokemonInTier.forEach(mon => {
-    let monName = normalizeString(mon);
-    if (app.data.pokedex[monName].evos == null) {
-      enemySet[monName] = app.data.pokedex[monName];
-      enemySet[monName].usage = {
-        weighted: metagame[mon].usage.weighted
-      };
-    }
-  });
+//   //Define the set of enemy pokemon to check against.
+//   let enemySet = {};
+//   /*Narrow down pokemonInTier to only the mons we actually care about.
+//   Remove all not-fully-evolved forms. This information is stored in our JSON object under a key called 'evos'
+//   If a pokemon is fully evolved, the 'evos' key will not be present.
+//   */
+//   pokemonInTier.forEach(mon => {
+//     let monName = normalizeString(mon);
+//     if (app.data.pokedex[monName].evos == null) {
+//       enemySet[monName] = app.data.pokedex[monName];
+//       enemySet[monName].usage = {
+//         weighted: metagame[mon].usage.weighted
+//       };
+//     }
+//   });
 
-  let matchup = checkOffensiveMatchup(
-    pokemonBuild,
-    buildMoves,
-    enemySet,
-    format
-  );
+//   let matchup = checkOffensiveMatchup(
+//     pokemonBuild,
+//     buildMoves,
+//     enemySet,
+//     format
+//   );
 
-  return {
-    matchup
-  };
-}
+//   return {
+//     matchup
+//   };
+// }
 
-function checkOffensiveMatchup(pokemonBuild, moves, enemySet, format) {
-  //Get list of keys from enemySet
-  let enemySetKeys = Object.keys(enemySet);
+// function checkOffensiveMatchup(pokemonBuild, moves, enemySet, format) {
+//   //Get list of keys from enemySet
+//   let enemySetKeys = Object.keys(enemySet);
 
-  //Define return object
-  let matchup = {};
+//   //Define return object
+//   let matchup = {};
 
-  //Check effectiveness of each move against each mon
-  enemySetKeys.forEach(mon => {
-    console.log('Checking effectiveness against: ' + mon);
-    /*For each move the pokemon knows in its current build,
-  Check the effectiveness of that move against each pokemon.
-  Keep the highest number.
-  */
-    let monData = enemySet[mon];
-    monData.effectiveness = 0;
-    if (moves.length > 1) {
-      moves.forEach(move => {
-        //The effectiveness of the move starts at 1
-        let effectiveness = checkMoveEffectiveness(
-          move,
-          pokemonBuild,
-          monData,
-          format
-        );
+//   //Check effectiveness of each move against each mon
+//   enemySetKeys.forEach(mon => {
+//     console.log('Checking effectiveness against: ' + mon);
+//     /*For each move the pokemon knows in its current build,
+//   Check the effectiveness of that move against each pokemon.
+//   Keep the highest number.
+//   */
+//     let monData = enemySet[mon];
+//     monData.effectiveness = 0;
+//     if (moves.length > 1) {
+//       moves.forEach(move => {
+//         //The effectiveness of the move starts at 1
+//         let effectiveness = checkMoveEffectiveness(
+//           move,
+//           pokemonBuild,
+//           monData,
+//           format
+//         );
 
-        if (effectiveness > monData.effectiveness) {
-          //If the effectiveness of this move is > than the stored value of the pokemon, overwrite it.
-          monData.effectiveness = effectiveness;
-        }
-      });
-    } else if (moves.length > 0) {
-      let effectiveness = checkMoveEffectiveness(
-        moves[0],
-        pokemonBuild,
-        monData,
-        format
-      );
+//         if (effectiveness > monData.effectiveness) {
+//           //If the effectiveness of this move is > than the stored value of the pokemon, overwrite it.
+//           monData.effectiveness = effectiveness;
+//         }
+//       });
+//     } else if (moves.length > 0) {
+//       let effectiveness = checkMoveEffectiveness(
+//         moves[0],
+//         pokemonBuild,
+//         monData,
+//         format
+//       );
 
-      if (effectiveness > monData.effectiveness) {
-        monData.effectiveness = effectiveness;
-      }
-    } else {
-      return {};
-    }
+//       if (effectiveness > monData.effectiveness) {
+//         monData.effectiveness = effectiveness;
+//       }
+//     } else {
+//       return {};
+//     }
 
-    //Check if key exists in matchups, if it doesn't: add it.
-    let keys = Object.keys(matchup);
-    if (keys.length == 0 || !keys.includes(monData.effectiveness.toString())) {
-      matchup[monData.effectiveness] = {
-        count: 0,
-        pokemon: []
-      };
-    }
+//     //Check if key exists in matchups, if it doesn't: add it.
+//     let keys = Object.keys(matchup);
+//     if (keys.length == 0 || !keys.includes(monData.effectiveness.toString())) {
+//       matchup[monData.effectiveness] = {
+//         count: 0,
+//         pokemon: []
+//       };
+//     }
 
-    //Sort pokemon into groups in matchup spread based on their effectiveness.
-    matchup[monData.effectiveness].pokemon.push({
-      name: monData.name,
-      usage: monData.usage.weighted
-    });
-    matchup[monData.effectiveness].count++;
-  });
+//     //Sort pokemon into groups in matchup spread based on their effectiveness.
+//     matchup[monData.effectiveness].pokemon.push({
+//       name: monData.name,
+//       usage: monData.usage.weighted
+//     });
+//     matchup[monData.effectiveness].count++;
+//   });
 
-  return matchup;
-}
+//   return matchup;
+// }
 
 function normalizeString(input) {
   //Removes special characters and returns lower-case string.
@@ -795,14 +792,28 @@ function normalizeString(input) {
 //   return effectiveness;
 // }
 
-function checkMoveEffectiveness(
-  move,
-  attackerBuild,
-  generation,
-  enemyBuild,
-  weather,
-  terrain
-) {}
+function checkMoveTypeEffectivenessVsEnemy(moveType, defenderTypes, gen) {
+  let typeEffectiveness = 1;
+  if (defenderTypes.length > 1) {
+    typeEffectiveness *= checkTypeEffectiveness(
+      moveType,
+      defenderTypes[0],
+      gen
+    );
+    typeEffectiveness *= checkTypeEffectiveness(
+      moveType,
+      defenderTypes[1],
+      gen
+    );
+  } else {
+    typeEffectiveness *= checkTypeEffectiveness(
+      moveType,
+      defenderTypes[0],
+      gen
+    );
+  }
+  return typeEffectiveness;
+}
 
 function checkTypeEffectiveness(attackType, defenseType, generation) {
   /*Types is indexed first by attacking type, then by defending type, and returns the damage multiplier.
@@ -1059,6 +1070,14 @@ export async function findOptimalBuild(build, format, params) {
       weather: '',
       terrain: ''
     },
+    statStages: {
+      Atk: 0,
+      Def: 0,
+      SpA: 0,
+      SpD: 0,
+      Spe: 0
+    },
+    status: '',
     moves: {
       STAB: 'force' || 'any',
       stats: 'considered' || 'ignored',
@@ -1091,6 +1110,8 @@ export async function findOptimalBuild(build, format, params) {
   build = dataSet.build;
   let allMoves = dataSet.legalMoves;
   let enemies = dataSet.enemies;
+  //Parse format
+  format = parseFormat(format);
 
   //Trim allMoves by params.moves
   //- Remove all status moves
@@ -1100,8 +1121,379 @@ export async function findOptimalBuild(build, format, params) {
   allMoves = trimMoves(allMoves, build, format.gen, params.moves);
 
   //Calculate hits-to-KO of each move against each mon.
+  let enemyNames = Object.keys(enemies);
+  enemyNames.forEach(e => {
+    //#region Debug
+    if (e == 'Boltund') {
+      console.log();
+    }
+    //#endregion
+    let enemy = enemies[e];
+    let baseStats = app.data.pokedex[normalizeString(e)].baseStats;
+    let likelyAbilities = [];
+    //Get all abilities with a usage rate greater than 0.01
+    let abilities = Object.keys(enemy.abilities);
+    if (abilities.length > 1) {
+      abilities.forEach(ability => {
+        if (
+          enemy.abilities[ability] > 0.01 &&
+          isDefensivelyRelevantAbility(ability)
+        ) {
+          likelyAbilities.push(ability);
+        }
+      });
+    } else {
+      likelyAbilities.push(abilities[0]);
+    }
+
+    if (likelyAbilities.length == 0) {
+      let mostCommonAbility = { name: '', rate: 0 };
+      abilities.forEach(ability => {
+        if (enemy.abilities[ability] > mostCommonAbility.rate) {
+          mostCommonAbility.name = ability;
+          mostCommonAbility.rate = enemy.abilities[ability];
+        }
+      });
+      likelyAbilities.push(mostCommonAbility.name);
+    }
+
+    //Find highest likely hp/def/spd values
+    let maxHP = 0;
+    let maxDef = 0;
+    let maxSpD = 0;
+    let defBoostNature = false;
+    let spdBoostNature = false;
+    let statSpreads = Object.keys(enemy.spreads);
+    statSpreads.forEach(spread => {
+      if (enemy.spreads[spread] > 0.01) {
+        let natureMatch = /([a-zA-Z]*)/g;
+        let statMatch = /([0-9]{1,3}(?=\/))/g;
+        let nature = spread.match(natureMatch)[0];
+        let stats = [...spread.matchAll(statMatch)];
+        let hp = stats[0][0];
+        let def = stats[2][0];
+        let spd = stats[4][0];
+        //Modify by nature
+        switch (nature) {
+          //We only have to check natures that buff def or spd
+          //Natures that buff SpD
+          case 'Calm':
+          case 'Gentle':
+          case 'Sassy':
+          case 'Careful':
+            spdBoostNature = true;
+            break;
+          //Natures that buff Def
+          case 'Bold':
+          case 'Lax':
+          case 'Relaxed':
+          case 'Impish':
+            defBoostNature = true;
+            break;
+        }
+        //Truncate
+        hp = Math.trunc(hp);
+        def = Math.trunc(def);
+        spd = Math.trunc(spd);
+        maxHP = hp > maxHP ? hp : maxHP;
+        maxDef = def > maxDef ? def : maxDef;
+        maxSpD = spd > maxSpD ? spd : maxSpD;
+      }
+    });
+
+    //Find likely defensively relavent items.
+    let items = Object.keys(enemy.items);
+    let likelyItems = [];
+    items.forEach(item => {
+      if (enemy.items[item] > 0.01 && isDefensivelyRelevantItem(item)) {
+        likelyItems.push(item);
+      }
+    });
+
+    //Construct a set for each ability and item combination.
+    let likelySets = [];
+    if (likelyAbilities.length > 1) {
+      likelyAbilities.forEach(ability => {
+        if (likelyItems.length > 1) {
+          likelyItems.forEach(item => {
+            likelySets.push(
+              constructEnemyBuild(
+                e,
+                ability,
+                maxHP,
+                maxDef,
+                maxSpD,
+                defBoostNature,
+                spdBoostNature,
+                item,
+                baseStats,
+                format.gen
+              )
+            );
+          });
+        } else if (likelyItems.length == 1) {
+          likelySets.push(
+            constructEnemyBuild(
+              e,
+              ability,
+              maxHP,
+              maxDef,
+              maxSpD,
+              defBoostNature,
+              spdBoostNature,
+              items[0],
+              baseStats,
+              format.gen
+            )
+          );
+        } else {
+          likelySets.push(
+            constructEnemyBuild(
+              e,
+              ability,
+              maxHP,
+              maxDef,
+              maxSpD,
+              defBoostNature,
+              spdBoostNature,
+              '',
+              baseStats,
+              format.gen
+            )
+          );
+        }
+      });
+    } else {
+      if (likelyItems.length > 1) {
+        likelyItems.forEach(item => {
+          likelySets.push(
+            constructEnemyBuild(
+              e,
+              likelyAbilities[0],
+              maxHP,
+              maxDef,
+              maxSpD,
+              defBoostNature,
+              spdBoostNature,
+              item,
+              baseStats,
+              format.gen
+            )
+          );
+        });
+      } else if (likelyItems.length == 1) {
+        likelySets.push(
+          constructEnemyBuild(
+            e,
+            likelyAbilities[0],
+            maxHP,
+            maxDef,
+            maxSpD,
+            defBoostNature,
+            spdBoostNature,
+            items[0],
+            baseStats,
+            format.gen
+          )
+        );
+      } else {
+        likelySets.push(
+          constructEnemyBuild(
+            e,
+            likelyAbilities[0],
+            maxHP,
+            maxDef,
+            maxSpD,
+            defBoostNature,
+            spdBoostNature,
+            '',
+            baseStats,
+            format.gen
+          )
+        );
+      }
+    }
+
+    //Now for each set, test each move.
+    if (likelySets.length > 1) {
+      likelySets.forEach(set => {
+        allMoves.forEach(move => {
+          if (!move.matchups) {
+            move.matchups = {};
+          }
+          let matchupData = calculateMoveDamage(
+            move,
+            build,
+            format.gen,
+            set,
+            params.fieldEffects.weather,
+            params.fieldEffects.terrain
+          );
+          let frequency = Math.min(
+            enemy.abilities[set.Ability],
+            set.Item == '' ? 1 : enemy.items[set.Item]
+          );
+          if (!move.matchups[e]) {
+            move.matchups[e] = {};
+          }
+          if (!move.matchups[e][set.Ability]) {
+            move.matchups[e][set.Ability] = {};
+          }
+          move.matchups[e][set.Ability][set.Item] = {
+            frequency: frequency,
+            matchup: matchupData
+          };
+        });
+      });
+    } else {
+      let set = likelySets[0];
+      allMoves.forEach(move => {
+        if (!move.matchups) {
+          move.matchups = {};
+        }
+        let matchupData = calculateMoveDamage(
+          move,
+          build,
+          format.gen,
+          set,
+          params.fieldEffects.weather,
+          params.fieldEffects.terrain
+        );
+        let frequency = Math.min(
+          enemy.abilities[set.Ability],
+          set.Item == '' ? 1 : enemy.items[set.Item]
+        );
+        if (!move.matchups[e]) {
+          move.matchups[e] = {};
+        }
+        if (!move.matchups[e][set.Ability]) {
+          move.matchups[e][set.Ability] = {};
+        }
+
+        move.matchups[e][set.Ability][set.Item] = {
+          frequency: frequency,
+          matchup: matchupData
+        };
+      });
+    }
+  });
+
+  console.log();
 
   //Create all unique sets recursively and compare against the previous set.
+}
+
+function constructEnemyBuild(
+  pokemon,
+  ability,
+  hpEV,
+  defEV,
+  spdEV,
+  defBoostNature,
+  spdBoostNature,
+  item,
+  baseStats,
+  gen
+) {
+  let build = {
+    Nickname: '',
+    Pokemon: pokemon,
+    Gender: 'R',
+    Item: item,
+    Ability: ability,
+    Level: 100,
+    Shiny: false,
+    EVs: {
+      HP: hpEV,
+      Atk: 0,
+      Def: defEV,
+      SpA: 0,
+      SpD: spdEV,
+      Spe: 0
+    },
+    IVs: {
+      HP: 31,
+      Atk: 31,
+      Def: 31,
+      SpA: 31,
+      SpD: 31,
+      Spe: 31
+    },
+    Nature: 'Hardy',
+    Moves: []
+  };
+
+  if (!build.Ability) {
+    build.Ability = '';
+  }
+
+  build.Types = app.data.pokedex[normalizeString(pokemon)].types;
+
+  build.Data = {};
+  build.Data.stats = [];
+  let statKeys = Object.keys(build.EVs);
+  for (let i = 0; i < 6; i++) {
+    build.Data.stats.push({
+      base_stat: baseStats[normalizeString(statKeys[i])],
+      stat: {
+        name: convertStatShorthand(statKeys[i])
+      }
+    });
+  }
+
+  build = CalculateStats(build, { gen: gen });
+
+  return build;
+}
+
+function isDefensivelyRelevantItem(item) {
+  //@todo Add berries
+  //@todo Add leftovers
+  let defensivelyRelevantItems = ['Air Balloon', 'Assault Vest', 'Focus Sash'];
+  return defensivelyRelevantItems.some(n => n == item);
+}
+
+function isDefensivelyRelevantAbility(ability) {
+  let defensivelyRelevantAbilities = [
+    'Aura Break',
+    'Bulletproof',
+    'Disguise',
+    'Dry Skin',
+    'Filter',
+    'Flash Fire',
+    'Fluffy',
+    'Heatproof',
+    'Ice Face',
+    'Levitate',
+    'Lighting Rod',
+    'Motor Drive',
+    'Multiscale',
+    'Neuroforce',
+    'Prism Armor',
+    'Punk Rock',
+    'Sap Sipper',
+    'Shadow Shield',
+    'Solid Rock',
+    'Soundproof',
+    'Storm Drain',
+    'Thick Fat',
+    'Volt Absorb',
+    'Water Absorb',
+    'Water Bubble',
+    'Wonder Guard',
+    'Drizzle',
+    'Drought',
+    'Desolate Land',
+    'Primordial Sea',
+    'Sand Stream',
+    'Snow Warning',
+    'Delta Stream',
+    'Electric Surge',
+    'Grassy Surge',
+    'Misty Surge',
+    'Psychic Surge'
+  ];
+  return defensivelyRelevantAbilities.some(n => n == ability);
 }
 
 export async function findFasterPokemon(speed, format) {
@@ -1179,18 +1571,45 @@ function calculateMoveDamage(
   let maxHitsToKO = 0;
   let minDamage = 0;
   let maxDamage = 0;
+  let AtkStage = attackerBuild.StatStages.Atk;
+  let SpAStage = attackerBuild.StatStages.SpA;
+
+  //#region Debug
+  console.log('Testing ' + move.move.name + ' against ' + enemyBuild.Pokemon);
+  if (move.move.name == 'scaleshot' && enemyBuild.Pokemon == 'Boltund') {
+    console.log();
+  }
+  //#endregion
 
   //Check enemy ability
   switch (enemyBuild.Ability) {
     //#region Weather
     case 'Drought':
-      weather = 'Sun';
+      if (
+        weather != 'Wind' &&
+        weather != 'Harsh Sun' &&
+        weather != 'Heavy Rain'
+      ) {
+        weather = 'Sun';
+      }
       break;
     case 'Drizzle':
-      weather = 'Rain';
+      if (
+        weather != 'Wind' &&
+        weather != 'Harsh Sun' &&
+        weather != 'Heavy Rain'
+      ) {
+        weather = 'Rain';
+      }
       break;
     case 'Snow Warning':
-      weather = 'Hail';
+      if (
+        weather != 'Wind' &&
+        weather != 'Harsh Sun' &&
+        weather != 'Heavy Rain'
+      ) {
+        weather = 'Hail';
+      }
       break;
     case 'Desolate Land':
       weather = 'Harsh Sun';
@@ -1199,13 +1618,25 @@ function calculateMoveDamage(
       weather = 'Heavy Rain';
       break;
     case 'Sand Stream':
-      weather = 'Sand';
+      if (
+        weather != 'Wind' &&
+        weather != 'Harsh Sun' &&
+        weather != 'Heavy Rain'
+      ) {
+        weather = 'Sand';
+      }
       break;
     case 'Delta Stream':
       weather = 'Wind';
       break;
     case 'Cloud Nine':
-      weather = '';
+      if (
+        weather != 'Wind' &&
+        weather != 'Harsh Sun' &&
+        weather != 'Heavy Rain'
+      ) {
+        weather = '';
+      }
       break;
     //#endregion
     //#region Terrain
@@ -1495,26 +1926,365 @@ function calculateMoveDamage(
           break;
         case 'Simple':
           //Simple doubles stat stage changes, positively and negatively.
-          attackerBuild.StatStages.Atk -= 2;
+          AtkStage -= 2;
+          break;
+        case 'Defiant':
+          AtkStage--;
+          AtkStage += 2;
+          break;
+        case 'Competitive':
+          AtkStage--;
+          SpAStage += 2;
           break;
         default:
-          attackerBuild.StatStages.Atk--;
+          AtkStage--;
       }
       break;
     //#endregion
   }
 
+  //Check Weather and Terrain.
+  switch (weather) {
+    case 'Sun':
+      //First change Weather Ball
+      if (move.move.name == 'weatherball') {
+        move.data.basePower = 100;
+        move.data.type = 'Fire';
+      }
+      if (move.move.data.type == 'Fire') {
+        effectiveness *= 1.5;
+      } else if (move.move.data.type == 'Water') {
+        effectiveness *= 0.5;
+      }
+      break;
+    case 'Harsh Sun':
+      //First change Weather Ball
+      if (move.move.name == 'weatherball') {
+        move.data.basePower = 100;
+        move.data.type = 'Fire';
+      }
+      if (move.move.data.type == 'Fire') {
+        effectiveness *= 1.5;
+      } else if (move.move.data.type == 'Water') {
+        return null;
+      }
+      break;
+    case 'Rain':
+      //First change Weather Ball
+      if (move.move.name == 'weatherball') {
+        move.data.basePower = 100;
+        move.data.type = 'Water';
+      }
+      if (move.move.data.type == 'Water') {
+        effectiveness *= 1.5;
+      } else if (move.move.data.type == 'Fire') {
+        effectiveness *= 0.5;
+      }
+      break;
+    case 'Heavy Rain':
+      //First change Weather Ball
+      if (move.move.name == 'weatherball') {
+        move.data.basePower = 100;
+        move.data.type = 'Water';
+      }
+      if (move.move.data.type == 'Water') {
+        effectiveness *= 1.5;
+      } else if (move.move.data.type == 'Fire') {
+        return null;
+      }
+      break;
+    case 'Hail':
+      //First change Weather Ball
+      if (move.move.name == 'weatherball') {
+        move.data.basePower = 100;
+        move.data.type = 'Ice';
+      }
+      break;
+    case 'Sand':
+      //First change Weather Ball
+      if (move.move.name == 'weatherball') {
+        move.data.basePower = 100;
+        move.data.type = 'Rock';
+      }
+      break;
+    case 'Wind':
+      //First change Weather Ball
+      if (move.move.name == 'weatherball') {
+        move.data.basePower = 50;
+        move.data.type = 'Normal';
+      }
+      break;
+    default:
+      //First change Weather Ball
+      if (move.move.name == 'weatherball') {
+        move.data.basePower = 50;
+        move.data.type = 'Normal';
+      }
+      break;
+  }
+
+  switch (terrain) {
+    case 'Grassy':
+      //Grassy terrain buffs grass moves against grounded pokemon.
+      if (move.move.data.type == 'Electric' && !isGrounded(enemyBuild)) {
+        if (generation < 8) {
+          effectiveness *= 1.5;
+        } else {
+          effectiveness *= 1.3;
+        }
+      } else if (
+        (move.move.name == 'Earthquake' ||
+          move.move.name == 'Bulldoze' ||
+          move.move.name == 'Magnitude') &&
+        isGrounded(enemyBuild)
+      ) {
+        //Grassy terrain reduces the power of these ground-type moves against grounded opponents.
+        move.move.data.basePower = Math.trunc(move.move.data.basePower * 0.5);
+      }
+      break;
+    case 'Misty':
+      //Misty terrain does not buff moves, but does reduce the power of dragon type moves by 50%.
+      if (move.move.data.type == 'Dragon' && !isGrounded(enemyBuild)) {
+        effectiveness *= 0.5;
+      }
+      break;
+    case 'Psychic':
+      //Psychic terrain buffs psychic moves against grounded pokemon.
+      if (move.move.data.type == 'Psychic' && !isGrounded(enemyBuild)) {
+        if (generation < 8) {
+          effectiveness *= 1.5;
+        } else {
+          effectiveness *= 1.3;
+        }
+      }
+      //Psychic terrain makes grounded opponents immune to priority moves.
+      if (move.move.data.priority > 0 && isGrounded(enemyBuild)) {
+        return null;
+      }
+      break;
+    case 'Electric':
+      //Electric terrain buffs electric moves against grounded pokemon.
+      if (move.move.data.type == 'Electric' && !isGrounded(enemyBuild)) {
+        if (generation < 8) {
+          effectiveness *= 1.5;
+        } else {
+          effectiveness *= 1.3;
+        }
+      }
+      break;
+    default:
+      break;
+  }
+
   //Calculate effectiveness vs enemy pokemon
 
-  //Calculate min possible dmg.
-  //Calculate max possible dmg.
+  //Type Effectiveness
+  let typeEffectiveness = checkMoveTypeEffectivenessVsEnemy(
+    move.move.data.type,
+    enemyBuild.Types,
+    generation
+  );
+  //If the move is flying press or freeze dry, type effectiveness changes somewhat.
+  if (move.move.name == 'flyingpress') {
+    //Flying Press is the only dual-type move in the game. It uses both Fighting and Flying as its types.
+    //Its first type is Fighting, so we have to additionally check its flying typing.
+    typeEffectiveness *= checkMoveTypeEffectivenessVsEnemy(
+      'Flying',
+      enemyBuild.Types,
+      generation
+    );
+  } else if (move.move.name == 'freezedry') {
+    //Freeze Dry is 2x effective against water types.
+    if (enemyBuild.Types.length > 1) {
+      if (enemyBuild.Types.lenght.some(type => type == 'Water')) {
+        typeEffectiveness *= 2;
+      }
+    } else {
+      if (enemyBuild.Types[0] == 'Water') {
+        typeEffectiveness *= 2;
+      }
+    }
+  }
 
-  //@todo before returning, check for sturdy or focus sash.
+  //Check abilities and items that activate based on move effectiveness.
+  if (typeEffectiveness >= 2) {
+    if (attackerBuild.Item == 'Expert Belt') {
+      //Expert Belt boosts the damage of super-effective moves by 20%.
+      effectiveness *= 1.2;
+    }
+    if (attackerBuild.abilities == 'Neuroforce') {
+      typeEffectiveness * 1.25;
+    }
+    if (monHasAbilities(enemyBuild, ['Filter', 'Solid Rock', 'Prism Armor'])) {
+      effectiveness *= 0.75;
+    }
+  } else if (typeEffectiveness <= 0) {
+    return null;
+  }
+
+  //Apply stat stages. Critical hits ignore negative stat stages on the attacker and positive stat stages on the defender.
+
+  //Find attacking stat and defending stat
+  let attackStat = 0;
+  let defenseStat = 0;
+  if (move.move.data.category == 'Physical') {
+    if (move.move.name == 'Body Press') {
+      //Body Press uses the attacker's defense rather than attack.
+      attackStat = attackerBuild.Stats.Def;
+    } else {
+      attackStat = attackerBuild.Stats.Atk;
+      //Apply stat stage
+      if (AtkStage > 0 || !move.move.data.willCrit) {
+        attackStat = applyStatStages(attackStat, AtkStage);
+      }
+    }
+
+    defenseStat = enemyBuild.Stats.Def;
+  } else {
+    attackStat = attackerBuild.Stats.SpA;
+    //Apply stat stage
+    if (SpAStage > 0 || !move.move.data.willCrit) {
+      attackStat = applyStatStages(attackStat, SpAStage);
+    }
+    if (move.move.name == 'psyshock') {
+      //Psyshock calculates against the opponent's defense rather than special defense
+      defenseStat = enemyBuild.Stats.Def;
+    } else {
+      defenseStat = enemyBuild.Stats.SpD;
+    }
+  }
+
+  //Calculate max possible dmg.
+  maxDamage =
+    ((((2 * attackerBuild.Level) / 5 + 2) *
+      move.move.data.basePower *
+      attackStat) /
+      defenseStat /
+      50 +
+      2) *
+    effectiveness *
+    typeEffectiveness;
+
+  maxDamage = Math.trunc(maxDamage);
+
+  //Calculate min possible dmg.
+  minDamage = Math.trunc(maxDamage * 0.85);
+
+  //Calculate min hits to KO
+  let defenderHP = enemyBuild.Stats.HP;
+  while (defenderHP > 0) {
+    //Check multi-scale
+    if (
+      defenderHP == enemyBuild.Stats.HP &&
+      monHasAbilities(enemyBuild, ['Multiscale', 'Shadow Shield']) &&
+      !monIgnoresAbilities(attackerBuild)
+    ) {
+      defenderHP -= maxDamage * 0.5;
+    } else {
+      defenderHP -= maxDamage;
+    }
+    minHitsToKO++;
+  }
+
+  //Check max hits to KO
+  defenderHP = enemyBuild.Stats.HP;
+  while (defenderHP > 0) {
+    //Check multi-scale
+    if (
+      defenderHP == enemyBuild.Stats.HP &&
+      monHasAbilities(enemyBuild, ['Multiscale', 'Shadow Shield']) &&
+      !monIgnoresAbilities(attackerBuild)
+    ) {
+      defenderHP -= minDamage * 0.5;
+    } else {
+      defenderHP -= minDamage;
+    }
+    maxHitsToKO++;
+  }
+
+  //Before returning, check for sturdy or focus sash.
+  if (
+    maxHitsToKO == 1 &&
+    !move.move.data.multihit &&
+    ((enemyBuild.Ability == 'Sturdy' && !monIgnoresAbilities(attackerBuild)) ||
+      enemyBuild.Item == 'Focus Sash')
+  ) {
+    maxHitsToKO++;
+  }
+  if (
+    minHitsToKO == 1 &&
+    !move.move.data.multihit &&
+    ((enemyBuild.Ability == 'Sturdy' && !monIgnoresAbilities(attackerBuild)) ||
+      enemyBuild.Item == 'Focus Sash')
+  ) {
+    minHitsToKO++;
+  }
 
   return {
     DamageRange: { min: minDamage, max: maxDamage },
     hitsToKO: { min: minHitsToKO, max: maxHitsToKO }
   };
+}
+
+function applyStatStages(stat, stage, generation) {
+  if (stage > 6) {
+    stage = 6;
+  } else if (stage < -6) {
+    stage = -6;
+  }
+  if (stage > 0) {
+    if (generation > 2) {
+      stat = Math.trunc(stat * ((100 + 50 * stage) / 100));
+    } else {
+      stat = Math.trunc(stat * ((2 + 1 * stage) / 2));
+    }
+  } else if (stage < 0) {
+    if (generation > 2) {
+      switch (stage) {
+        case -1:
+          stat = Math.trunc(stat * (66 / 100));
+          break;
+        case -2:
+          stat = Math.trunc(stat * (50 / 100));
+          break;
+        case -3:
+          stat = Math.trunc(stat * (40 / 100));
+          break;
+        case -4:
+          stat = Math.trunc(stat * (33 / 100));
+          break;
+        case -5:
+          stat = Math.trunc(stat * (28 / 100));
+          break;
+        case -6:
+          stat = Math.trunc(stat * (25 / 100));
+          break;
+      }
+    } else {
+      stat = Math.trunc(stat * (2 / (2 + Math.abs(stage))));
+    }
+  } else {
+    return stat;
+  }
+  return stat;
+}
+
+function isGrounded(pokemon) {
+  let isFlying = false;
+  if (pokemon.Types.length > 1) {
+    pokemon.Types.forEach(type => {
+      if (type == 'Flying') {
+        isFlying = true;
+      }
+    });
+  } else {
+    isFlying = pokemon.Types[0] == 'Flying';
+  }
+  return (
+    monHasAbility(pokemon, 'Levitate') ||
+    isFlying ||
+    pokemon.Item == 'Air Balloon'
+  );
 }
 
 function monIgnoresAbilities(build) {
@@ -1680,6 +2450,14 @@ async function GetDataSet(build, format, params) {
   //Augment build with data
   build.Data = pokemonData;
   build.Types = app.data.pokedex[normalizeString(build.Pokemon)].types;
+
+  //Add expected stat changes and status effects.
+  build.Status = params.status;
+  build.StatStages = {};
+  let statKeys = Object.keys(params.statStages);
+  statKeys.forEach(stat => {
+    build.StatStages[stat] = params.statStages[stat];
+  });
 
   //Construct and augment Final Stats (Factor items and abilities, like Flare Boost)
   build = CalculateStats(build, format);
@@ -1941,6 +2719,7 @@ async function GetMoves(build, format, params) {
   let legalMovesKeys = Object.keys(legalMoves);
 
   //Iterate over all legal moves
+  //@todo Abstract this for use in other funtionalities.
   legalMovesKeys.forEach(moveKey => {
     let move = legalMoves[moveKey].move;
     //- Add base-effectiveness trait
