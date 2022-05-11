@@ -2,6 +2,39 @@ import * as pokedexService from '../services/pokedexService.js';
 import * as pokeApiService from '../services/pokeApiService.js';
 import * as showdownService from '../services/showdownService.js';
 
+const params = {
+  compareMethod: 'less bad',
+  fieldEffects: {
+    weather: 'None',
+    terrain: 'None'
+  },
+  statStages: {
+    Atk: 0,
+    Def: 0,
+    SpA: 0,
+    SpD: 0,
+    Spe: 0
+  },
+  status: '',
+  moves: {
+    STAB: 'any',
+    stats: 'considered',
+    priority: 'any',
+    accuracyTolerance: 80,
+    contact: 'any',
+    recoil: 'omit',
+    selfDebuffing: 'omit',
+    selfTrapping: 'omit',
+    switching: 'omit',
+    minPP: 0,
+    ignoreList: []
+  },
+  enemies: {
+    nfe: 'exclude',
+    minUsage: 0
+  }
+};
+
 //GET method for finding a pokemon by its name.
 export async function getPokemonByName(req, res) {
   try {
@@ -33,54 +66,21 @@ export async function getOffensiveMatchups(req, res) {
   console.log(
     'Getting matchup chart for: ' + pokemon.Pokemon + ' in ' + req.query.format
   );
-  let results = await pokedexService.getOffenseMatchups(
+  let results = await pokedexService.getBuildMatchupSpread(
     pokemon,
-    req.query.format
+    req.query.format,
+    params
   );
   console.log('Finished');
   res.send(results);
 }
 
 export async function findOptimalBuild(req, res) {
-  console.log(req);
-  let params = {
-    compareMethod: 'less bad',
-    fieldEffects: {
-      weather: 'None',
-      terrain: 'None'
-    },
-    statStages: {
-      Atk: 0,
-      Def: 0,
-      SpA: 0,
-      SpD: 0,
-      Spe: 0
-    },
-    status: '',
-    moves: {
-      STAB: 'any',
-      stats: 'considered',
-      priority: 'any',
-      accuracyTolerance: 90,
-      contact: 'any',
-      recoil: 'omit',
-      selfDebuffing: 'omit',
-      selfTrapping: 'omit',
-      switching: 'omit',
-      minPP: 10,
-      ignoreList: ['Ice Beam', 'Flamethrower']
-    },
-    enemies: {
-      nfe: 'exclude',
-      topX: 0
-    }
-  };
   let results = await pokedexService.findOptimalBuild(
     req.body,
     req.query.format,
     params
   );
-  console.log(results);
   res.send(results);
 }
 
