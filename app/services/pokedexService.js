@@ -23,6 +23,8 @@ const types = [
   'Fairy'
 ];
 
+var iterations = 0;
+
 export function getFilteredMoveList(pokemonData, level, generation) {
   return pokemonData.moves.filter(moveEntry =>
     moveEntry.version_group_details.some(
@@ -1120,14 +1122,12 @@ export async function findOptimalBuild(build, format, params) {
   //- Also remove status moves from current build.
   allMoves = trimMoves(allMoves, build, format.gen, params.moves);
 
+  //Define each enemy build we are measuring effectiveness against
+  let enemyBuilds = [];
+
   //Calculate hits-to-KO of each move against each mon.
   let enemyNames = Object.keys(enemies);
   enemyNames.forEach(e => {
-    //#region Debug
-    if (e == 'Boltund') {
-      console.log();
-    }
-    //#endregion
     let enemy = enemies[e];
     let baseStats = app.data.pokedex[normalizeString(e)].baseStats;
     let likelyAbilities = [];
@@ -1230,6 +1230,7 @@ export async function findOptimalBuild(build, format, params) {
                 format.gen
               )
             );
+            enemyBuilds.push({ pokemon: e, ability: ability, item: item });
           });
         } else if (likelyItems.length == 1) {
           likelySets.push(
@@ -1246,6 +1247,7 @@ export async function findOptimalBuild(build, format, params) {
               format.gen
             )
           );
+          enemyBuilds.push({ pokemon: e, ability: ability, item: items[0] });
         } else {
           likelySets.push(
             constructEnemyBuild(
@@ -1261,6 +1263,7 @@ export async function findOptimalBuild(build, format, params) {
               format.gen
             )
           );
+          enemyBuilds.push({ pokemon: e, ability: ability, item: '' });
         }
       });
     } else {
@@ -1280,6 +1283,11 @@ export async function findOptimalBuild(build, format, params) {
               format.gen
             )
           );
+          enemyBuilds.push({
+            pokemon: e,
+            ability: likelyAbilities[0],
+            item: item
+          });
         });
       } else if (likelyItems.length == 1) {
         likelySets.push(
@@ -1296,6 +1304,11 @@ export async function findOptimalBuild(build, format, params) {
             format.gen
           )
         );
+        enemyBuilds.push({
+          pokemon: e,
+          ability: likelyAbilities[0],
+          item: items[0]
+        });
       } else {
         likelySets.push(
           constructEnemyBuild(
@@ -1311,6 +1324,7 @@ export async function findOptimalBuild(build, format, params) {
             format.gen
           )
         );
+        enemyBuilds.push({ pokemon: e, ability: likelyAbilities[0], item: '' });
       }
     }
 
@@ -1378,9 +1392,174 @@ export async function findOptimalBuild(build, format, params) {
     }
   });
 
-  console.log();
-
   //Create all unique sets recursively and compare against the previous set.
+  let bestSet = constructAndTestBuilds(allMoves, [], enemyBuilds, params);
+  return bestSet;
+}
+
+function constructAndTestBuilds(
+  allMoves,
+  currentSet,
+  enemyBuilds,
+  params,
+  bestSet = null
+) {
+  /*This function is recursive.
+  -allMoves defines the list of all the moves we want to use to construct sets of 4 unique moves.
+    These moves should already contain matchup data.
+  -currentSet defines the current set of 4 unique moves. Different orderings of the moves do not constitute uniqueness.
+    We must check if currentSet contains 4 moves. If it does not, we will select a move from the list, add it to currentSet, and subsequently remove it from that list.
+    Then we will pass in the newly trimmed list and the new currentSet into this method recursively.
+  -enemies defines the list of all the enemy builds we will be testing against. This is provided to increase lookup time.
+  -params tells us what criteria we're using to compare two builds.
+  -bestSet defines the current best set we have found. Each time we construct a unique set of 4 moves and find its matchup spread, we will compare it against
+    bestSet, and keep the better of the two as the new bestSet. This will be the return value. bestSet will contain both the set of 4 moves, and the matchupSpread
+    object that is the compilation of its matchups.
+  */
+
+  //Check to see  if the currentSet that has been provided is complete or not.
+  if (currentSet.length == 4) {
+    //#region Debug
+    console.log(
+      iterations++ +
+        ' Testing moves: ' +
+        currentSet[0].move.name +
+        ', ' +
+        currentSet[1].move.name +
+        ', ' +
+        currentSet[2].move.name +
+        ', ' +
+        currentSet[3].move.name +
+        ', '
+    );
+    //#endregion
+    //If it is, we calculate its matchup spread.
+    let matchup = {
+      1: [],
+      2: [],
+      3: [],
+      4: [],
+      5: [],
+      8: [],
+      16: [],
+      null: [],
+      score: 0
+    };
+    enemyBuilds.forEach(build => {
+      //Find the most effective we can be against that build with this set.
+      let bestMatchup = undefined;
+      currentSet.forEach(move => {
+        let moveEffectiveness =
+          move.matchups[build.pokemon][build.ability][build.item];
+        if (!bestMatchup) {
+          bestMatchup = moveEffectiveness;
+        } else {
+          //If this move can reliably KO that build in less hits than the previous best matchup, we save it instead.
+          if (
+            bestMatchup.matchup.hitsToKO.max == null &&
+            moveEffectiveness.matchup.hitsToKO.max != null
+          ) {
+            bestMatchup = moveEffectiveness;
+          } else if (
+            moveEffectiveness.matchup.hitsToKO.max == null &&
+            bestMatchup.matchup.hitsToKO.max != null
+          ) {
+            //Leave bestMatchup as is.
+          } else {
+            bestMatchup =
+              bestMatchup.matchup.hitsToKO.max <
+              moveEffectiveness.matchup.hitsToKO.max
+                ? bestMatchup
+                : moveEffectiveness;
+          }
+        }
+      });
+      let key = bestMatchup.matchup.hitsToKO.max;
+      switch (true) {
+        case key == null:
+          //This means you cannot hit the pokemon at all.
+          matchup.null.push(build);
+          matchup.score -= 5;
+          break;
+        case key == 1:
+          //This means you are guaranteed to OHKO the pokemon.
+          matchup[1].push(build);
+          matchup.score += 4;
+          break;
+        case key == 2:
+          //This means you will deal at least half of the enemy's health in damage, making it unsafe for them to swap into you, especially if you are faster.
+          matchup[2].push(build);
+          matchup.score += 2;
+          break;
+        case key == 3:
+          //This means you will do at least a third of the enemy's health in damage, which is good chip.
+          matchup[3].push(build);
+          matchup.score += 1;
+          break;
+        case key == 4:
+          //25% is negligable chip damage for the most part.
+          matchup[4].push(build);
+          matchup.score -= 1;
+          break;
+        case key > 4 && key < 7:
+          matchup[5].push(build);
+          matchup.score -= 2;
+          break;
+        case key > 7 && key < 16:
+          matchup[8].push(build);
+          matchup.score -= 3;
+          break;
+        case key >= 16:
+          //Dealing 1/16th damage or less means you are incapable of KOing the enemy if it has leftovers.
+          matchup[16].push(build);
+          matchup.score -= 4;
+          break;
+      }
+    });
+
+    //Now that we have our matchup spread defined, we need to compare it against the previous best.
+    //This comparison will be slightly different based on the user's provided parameters.
+    if (!bestSet) {
+      bestSet = { moves: [...currentSet], matchup: matchup };
+    } else {
+      //For now I'm only implimenting one comparison method, as proof of concept.
+      bestSet =
+        bestSet.matchup.score > matchup.score
+          ? bestSet
+          : { moves: [...currentSet], matchup: matchup };
+    }
+  } else {
+    //If it's not, while allMoves still has moves in it, we add one to the set, remove it from allMoves, and recurse.
+    // for (let i = allMoves.length - 1; i >= 0; i--) {
+    //   currentSet.push(allMoves[i]);
+    //   let trimmedMoves = [...allMoves];
+    //   trimmedMoves.pop();
+    //   bestSet = constructAndTestBuilds(
+    //     trimmedMoves,
+    //     currentSet,
+    //     enemyBuilds,
+    //     params,
+    //     bestSet
+    //   );
+    //   currentSet.pop();
+    // }
+    while (allMoves.length > 0) {
+      allMoves = [...allMoves];
+      currentSet.push(allMoves[allMoves.length - 1]);
+      allMoves.pop();
+      bestSet = constructAndTestBuilds(
+        allMoves,
+        currentSet,
+        enemyBuilds,
+        params,
+        bestSet
+      );
+      currentSet.pop();
+    }
+  }
+
+  //At the end we return the best set we were able to find.
+  return bestSet;
 }
 
 function constructEnemyBuild(
@@ -1661,7 +1840,10 @@ function calculateMoveDamage(
         !monIgnoresAbilities(attackerBuild) &&
         move.move.data.ignoreAbility == false
       ) {
-        return null;
+        return {
+          DamageRange: { min: null, max: null },
+          hitsToKO: { min: null, max: null }
+        };
       }
       break;
     case 'Battle Armor':
@@ -1679,7 +1861,10 @@ function calculateMoveDamage(
         !monIgnoresAbilities(attackerBuild) &&
         move.move.data.ignoreAbility == false
       ) {
-        return null;
+        return {
+          DamageRange: { min: null, max: null },
+          hitsToKO: { min: null, max: null }
+        };
       }
       break;
     case 'Damp':
@@ -1688,7 +1873,10 @@ function calculateMoveDamage(
         !monIgnoresAbilities(attackerBuild) &&
         move.move.data.ignoreAbility == false
       ) {
-        return null;
+        return {
+          DamageRange: { min: null, max: null },
+          hitsToKO: { min: null, max: null }
+        };
       }
       break;
     case 'Queenly Majesty':
@@ -1698,7 +1886,10 @@ function calculateMoveDamage(
         !monIgnoresAbilities(attackerBuild) &&
         move.move.data.ignoreAbility == false
       ) {
-        return null;
+        return {
+          DamageRange: { min: null, max: null },
+          hitsToKO: { min: null, max: null }
+        };
       }
       break;
     case 'Disguise':
@@ -1729,7 +1920,10 @@ function calculateMoveDamage(
         if (move.move.data.type == 'Fire') {
           effectiveness *= 1.25;
         } else if (move.move.data.type == 'Water') {
-          return null;
+          return {
+            DamageRange: { min: null, max: null },
+            hitsToKO: { min: null, max: null }
+          };
         }
       }
       break;
@@ -1815,7 +2009,10 @@ function calculateMoveDamage(
         !monIgnoresAbilities(attackerBuild) &&
         move.move.data.ignoreAbility == false
       ) {
-        return null;
+        return {
+          DamageRange: { min: null, max: null },
+          hitsToKO: { min: null, max: null }
+        };
       }
       break;
     case 'Light Metal':
@@ -1834,7 +2031,10 @@ function calculateMoveDamage(
         !monIgnoresAbilities(attackerBuild) &&
         move.move.data.ignoreAbility == false
       ) {
-        return null;
+        return {
+          DamageRange: { min: null, max: null },
+          hitsToKO: { min: null, max: null }
+        };
       }
       break;
     case 'Marvel Scale':
@@ -1870,7 +2070,10 @@ function calculateMoveDamage(
         !monIgnoresAbilities(attackerBuild) &&
         move.move.data.ignoreAbility == false
       ) {
-        return null;
+        return {
+          DamageRange: { min: null, max: null },
+          hitsToKO: { min: null, max: null }
+        };
       }
       break;
     case 'Soundproof':
@@ -1879,7 +2082,10 @@ function calculateMoveDamage(
         !monIgnoresAbilities(attackerBuild) &&
         move.move.data.ignoreAbility == false
       ) {
-        return null;
+        return {
+          DamageRange: { min: null, max: null },
+          hitsToKO: { min: null, max: null }
+        };
       }
       break;
     case 'Storm Drain':
@@ -1889,7 +2095,10 @@ function calculateMoveDamage(
         !monIgnoresAbilities(attackerBuild) &&
         move.move.data.ignoreAbility == false
       ) {
-        return null;
+        return {
+          DamageRange: { min: null, max: null },
+          hitsToKO: { min: null, max: null }
+        };
       }
       break;
     case 'Thick Fat':
@@ -1966,7 +2175,10 @@ function calculateMoveDamage(
       if (move.move.data.type == 'Fire') {
         effectiveness *= 1.5;
       } else if (move.move.data.type == 'Water') {
-        return null;
+        return {
+          DamageRange: { min: null, max: null },
+          hitsToKO: { min: null, max: null }
+        };
       }
       break;
     case 'Rain':
@@ -1990,7 +2202,10 @@ function calculateMoveDamage(
       if (move.move.data.type == 'Water') {
         effectiveness *= 1.5;
       } else if (move.move.data.type == 'Fire') {
-        return null;
+        return {
+          DamageRange: { min: null, max: null },
+          hitsToKO: { min: null, max: null }
+        };
       }
       break;
     case 'Hail':
@@ -2059,7 +2274,10 @@ function calculateMoveDamage(
       }
       //Psychic terrain makes grounded opponents immune to priority moves.
       if (move.move.data.priority > 0 && isGrounded(enemyBuild)) {
-        return null;
+        return {
+          DamageRange: { min: null, max: null },
+          hitsToKO: { min: null, max: null }
+        };
       }
       break;
     case 'Electric':
@@ -2096,7 +2314,7 @@ function calculateMoveDamage(
   } else if (move.move.name == 'freezedry') {
     //Freeze Dry is 2x effective against water types.
     if (enemyBuild.Types.length > 1) {
-      if (enemyBuild.Types.lenght.some(type => type == 'Water')) {
+      if (enemyBuild.Types.length.some(type => type == 'Water')) {
         typeEffectiveness *= 2;
       }
     } else {
@@ -2119,7 +2337,10 @@ function calculateMoveDamage(
       effectiveness *= 0.75;
     }
   } else if (typeEffectiveness <= 0) {
-    return null;
+    return {
+      DamageRange: { min: null, max: null },
+      hitsToKO: { min: null, max: null }
+    };
   }
 
   //Apply stat stages. Critical hits ignore negative stat stages on the attacker and positive stat stages on the defender.

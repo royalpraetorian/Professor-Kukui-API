@@ -62,7 +62,7 @@ export async function findOptimalBuild(req, res) {
       stats: 'considered',
       priority: 'any',
       accuracyTolerance: 90,
-      contact: 'omit',
+      contact: 'any',
       recoil: 'omit',
       selfDebuffing: 'omit',
       selfTrapping: 'omit',
