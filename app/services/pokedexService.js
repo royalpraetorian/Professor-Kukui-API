@@ -102,7 +102,7 @@ export async function findOptimalBuild(build, format, params) {
   let bestSet = constructAndTestSets(allMoves, [], enemyBuilds, params);
   //#region Debug
   //#endregion
-  return bestSet;
+  return cleanUpMatchupOutput(bestSet);
 }
 
 export async function getBuildMatchupSpread(build, format, params) {
@@ -126,7 +126,7 @@ export async function getBuildMatchupSpread(build, format, params) {
     build
   );
   let matchup = calculateSetMatchupSpread(build.Moves, enemyBuilds);
-  return matchup;
+  return cleanUpMatchupOutput(matchup);
 }
 export function getFilteredMoveList(pokemonData, level, generation) {
   return pokemonData.moves.filter(moveEntry =>
@@ -228,8 +228,8 @@ So we parse the first line as a special case, then loop for i=1; i<lines.legnth;
     The species is the only guaranteed factor here, and will always start at the beginning of the line
     So we only need to capture any set of characters that doesn't contain a space and then grab the first one.
     */
-    let speciesMatch = /[^ ]*/;
-    pokemon.Pokemon = info.match(speciesMatch)[0];
+    let speciesMatch = /^[^@()]*/; //The species, if it is followed by anything, will be followed by either @ or (, so we match up until those points, from the beginning.
+    pokemon.Pokemon = info.match(speciesMatch)[0].trim();
   }
 
   // #TODO Write a check to see if the pokemon is real
@@ -554,7 +554,8 @@ function checkTypeEffectiveness(attackType, defenseType, generation) {
       Steel: 2,
       Fire: 2,
       Grass: 0.5,
-      Electric: 2
+      Electric: 2,
+      Flying: 0
     },
     Rock: {
       Fighting: 0.5,
@@ -1011,19 +1012,6 @@ function constructAndTestSets(
     }
   } else {
     //If it's not, while allMoves still has moves in it, we add one to the set, remove it from allMoves, and recurse.
-    // for (let i = allMoves.length - 1; i >= 0; i--) {
-    //   currentSet.push(allMoves[i]);
-    //   let trimmedMoves = [...allMoves];
-    //   trimmedMoves.pop();
-    //   bestSet = constructAndTestBuilds(
-    //     trimmedMoves,
-    //     currentSet,
-    //     enemyBuilds,
-    //     params,
-    //     bestSet
-    //   );
-    //   currentSet.pop();
-    // }
     while (allMoves.length > 0) {
       allMoves = [...allMoves];
       currentSet.push(allMoves[allMoves.length - 1]);
@@ -1136,70 +1124,80 @@ function calculateSetMatchupSpread(currentSet, enemyBuilds) {
     //Find the most effective we can be against that build with this set.
     let bestMatchup = undefined;
     currentSet.forEach(move => {
+      //#region Debug
+      //#endregion
       let moveEffectiveness =
         move.matchups[build.pokemon][build.ability][build.item];
       if (!bestMatchup) {
-        bestMatchup = moveEffectiveness;
+        bestMatchup = {
+          move: move.move.name,
+          maxHitsToKO: moveEffectiveness.matchup.hitsToKO.max
+        };
       } else {
         //If this move can reliably KO that build in less hits than the previous best matchup, we save it instead.
         if (
-          bestMatchup.matchup.hitsToKO.max == null &&
+          bestMatchup.maxHitsToKO == null &&
           moveEffectiveness.matchup.hitsToKO.max != null
         ) {
-          bestMatchup = moveEffectiveness;
+          bestMatchup = {
+            move: move.move.name,
+            maxHitsToKO: moveEffectiveness.matchup.hitsToKO.max
+          };
         } else if (
           moveEffectiveness.matchup.hitsToKO.max == null &&
-          bestMatchup.matchup.hitsToKO.max != null
+          bestMatchup.maxHitsToKO != null
         ) {
           //Leave bestMatchup as is.
         } else {
           bestMatchup =
-            bestMatchup.matchup.hitsToKO.max <
-            moveEffectiveness.matchup.hitsToKO.max
+            bestMatchup.maxHitsToKO < moveEffectiveness.matchup.hitsToKO.max
               ? bestMatchup
-              : moveEffectiveness;
+              : {
+                  move: move.move.name,
+                  maxHitsToKO: moveEffectiveness.matchup.hitsToKO.max
+                };
         }
       }
     });
-    let key = bestMatchup.matchup.hitsToKO.max;
+    let key = bestMatchup.maxHitsToKO;
     switch (true) {
       case key == null:
         //This means you cannot hit the pokemon at all.
-        matchup.null.push(build);
-        matchup.score -= 5;
+        matchup.null.push({ build: build, move: bestMatchup.move });
+        matchup.score -= 5 * build.usage;
         break;
       case key == 1:
         //This means you are guaranteed to OHKO the pokemon.
-        matchup[1].push(build);
-        matchup.score += 4;
+        matchup[1].push({ build: build, move: bestMatchup.move });
+        matchup.score += 4 * build.usage;
         break;
       case key == 2:
         //This means you will deal at least half of the enemy's health in damage, making it unsafe for them to swap into you, especially if you are faster.
-        matchup[2].push(build);
-        matchup.score += 2;
+        matchup[2].push({ build: build, move: bestMatchup.move });
+        matchup.score += 2 * build.usage;
         break;
       case key == 3:
         //This means you will do at least a third of the enemy's health in damage, which is good chip.
-        matchup[3].push(build);
-        matchup.score += 1;
+        matchup[3].push({ build: build, move: bestMatchup.move });
+        matchup.score += 1 * build.usage;
         break;
       case key == 4:
         //25% is negligable chip damage for the most part.
-        matchup[4].push(build);
-        matchup.score -= 1;
+        matchup[4].push({ build: build, move: bestMatchup.move });
+        matchup.score -= 1 * build.usage;
         break;
       case key > 4 && key < 7:
-        matchup[5].push(build);
-        matchup.score -= 2;
+        matchup[5].push({ build: build, move: bestMatchup.move });
+        matchup.score -= 2 * build.usage;
         break;
       case key > 7 && key < 16:
-        matchup[8].push(build);
-        matchup.score -= 3;
+        matchup[8].push({ build: build, move: bestMatchup.move });
+        matchup.score -= 3 * build.usage;
         break;
       case key >= 16:
         //Dealing 1/16th damage or less means you are incapable of KOing the enemy if it has leftovers.
-        matchup[16].push(build);
-        matchup.score -= 4;
+        matchup[16].push({ build: build, move: bestMatchup.move });
+        matchup.score -= 4 * build.usage;
         break;
     }
   });
@@ -3009,15 +3007,29 @@ function calculateMoveListDamageVsEnemyBuilds(
   let enemyNames = Object.keys(enemies);
   enemyNames.forEach(e => {
     let enemy = enemies[e];
+    //#region Debug
+    if (enemy.usage.raw <= 0.0044) {
+      console.log();
+    }
+    if (e == 'Shedinja') {
+      console.log();
+    }
+    //#endregion
     let baseStats = app.data.pokedex[normalizeString(e)].baseStats;
     let likelyAbilities = [];
-    //Get all abilities with a usage rate greater than 0.01
+    /* Get all defensively-relevant abilities and up to one non-defensively-relevant ability,
+    With a usage rate - when combined with the mon's raw usage rate - greater than the larger number between
+    the user specified min or 0.01. We have to include 0.01 to avoid accidentally getting every ability,
+    and later getting every item, which would likely make this program run until the heat death of the universe.
+    */
     let abilities = Object.keys(enemy.abilities);
     if (abilities.length > 1) {
       abilities.forEach(ability => {
         if (
-          enemy.abilities[ability] > 0.01 &&
-          isDefensivelyRelevantAbility(ability)
+          enemy.abilities[ability] * enemy.usage.raw >
+            Math.max(params.enemies.minUsage, 0.01) &&
+          (isDefensivelyRelevantAbility(ability) ||
+            !likelyAbilities.some(a => !isDefensivelyRelevantAbility(a)))
         ) {
           likelyAbilities.push(ability);
         }
@@ -3045,7 +3057,10 @@ function calculateMoveListDamageVsEnemyBuilds(
     let spdBoostNature = false;
     let statSpreads = Object.keys(enemy.spreads);
     statSpreads.forEach(spread => {
-      if (enemy.spreads[spread] > 0.01) {
+      if (
+        enemy.spreads[spread] * enemy.usage.raw >
+        Math.max(params.enemies.minUsage, 0.01)
+      ) {
         let natureMatch = /([a-zA-Z]*)/g;
         let statMatch = /([0-9]{1,3}(?=\/))/g;
         let nature = spread.match(natureMatch)[0];
@@ -3081,11 +3096,15 @@ function calculateMoveListDamageVsEnemyBuilds(
       }
     });
 
-    //Find likely defensively relavent items.
     let items = Object.keys(enemy.items);
     let likelyItems = [];
     items.forEach(item => {
-      if (enemy.items[item] > 0.01 && isDefensivelyRelevantItem(item)) {
+      if (
+        enemy.items[item] * enemy.usage.raw >
+          Math.max(params.enemies.minUsage, 0.01) &&
+        (isDefensivelyRelevantItem(item) ||
+          !likelyItems.some(i => !isDefensivelyRelevantItem(i)))
+      ) {
         likelyItems.push(item);
       }
     });
@@ -3095,21 +3114,33 @@ function calculateMoveListDamageVsEnemyBuilds(
     if (likelyItems.length == 0) likelyItems.push('');
     likelyAbilities.forEach(ability => {
       likelyItems.forEach(item => {
-        likelySets.push(
-          constructEnemyBuild(
-            e,
-            ability,
-            maxHP,
-            maxDef,
-            maxSpD,
-            defBoostNature,
-            spdBoostNature,
-            item,
-            baseStats,
-            format.gen
-          )
-        );
-        enemyBuilds.push({ pokemon: e, ability: ability, item: item });
+        //Find the minimum usage rate of that pokemon/item combination or pokemon/ability combination.
+        let pokemonUsage = enemy.usage.raw;
+        let abilityUsage = enemy.abilities[ability];
+        let itemUsage = enemy.items[item];
+        let effectiveUsage = pokemonUsage * Math.min(abilityUsage, itemUsage);
+        if (effectiveUsage > params.enemies.minUsage) {
+          likelySets.push(
+            constructEnemyBuild(
+              e,
+              ability,
+              maxHP,
+              maxDef,
+              maxSpD,
+              defBoostNature,
+              spdBoostNature,
+              item,
+              baseStats,
+              format.gen
+            )
+          );
+          enemyBuilds.push({
+            pokemon: e,
+            ability: ability,
+            item: item,
+            usage: effectiveUsage
+          });
+        }
       });
     });
 
@@ -3274,6 +3305,24 @@ function normalizeString(input) {
     input = 'visegrip';
   }
   return input;
+}
+function cleanUpMatchupOutput(matchup) {
+  matchup.matchup.total = 0;
+  Object.keys(matchup.matchup).forEach(n => {
+    if (n != 'score' && n != 'total') {
+      matchup.matchup[n] = {
+        count: matchup.matchup[n].length,
+        pokemon: matchup.matchup[n]
+      };
+      matchup.matchup[n].pokemon.sort((a, b) => a.build.usage > b.build.usage);
+      matchup.matchup.total += matchup.matchup[n].count;
+    }
+  });
+  let moves = [...matchup.moves];
+  matchup.moves = [];
+  moves.forEach(move => matchup.moves.push(move.move.name));
+  matchup = { moves: matchup.moves, matchups: matchup.matchup };
+  return matchup;
 }
 //#endregion
 

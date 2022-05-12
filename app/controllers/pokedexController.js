@@ -20,7 +20,7 @@ const params = {
     STAB: 'any',
     stats: 'considered',
     priority: 'any',
-    accuracyTolerance: 80,
+    accuracyTolerance: 70,
     contact: 'any',
     recoil: 'omit',
     selfDebuffing: 'omit',
