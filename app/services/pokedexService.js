@@ -1,7 +1,7 @@
 import app from '../index.js';
 import * as pokeApiService from './pokeApiService.js';
 import * as showdownService from './showdownService.js';
-
+var iterations = 0;
 //#region Constants
 const types = [
   'Normal',
@@ -26,9 +26,7 @@ const types = [
 // const categories = ['Physical', 'Special'];
 //#endregion
 
-//#region Exports
-export async function findOptimalBuild(build, format, params) {
-  /* Params format:
+/* Params format:
   Params = {
     compareMethod: 'less bad' || 'more good',
     fieldEffects: {
@@ -63,6 +61,9 @@ export async function findOptimalBuild(build, format, params) {
     } 
   }
   */
+
+//#region Exports
+export async function findOptimalBuild(build, format, params) {
   //Check if build is parsed, if not: parse build
   try {
     build = parsePokePaste(build);
@@ -101,10 +102,12 @@ export async function findOptimalBuild(build, format, params) {
 
   let bestSet = constructAndTestSets(allMoves, [], enemyBuilds, params);
   //#region Debug
+  console.log(
+    'Tested ' + iterations + ' sets of ' + allMoves.length + ' moves'
+  );
   //#endregion
   return cleanUpMatchupOutput(bestSet);
 }
-
 export async function getBuildMatchupSpread(build, format, params) {
   //Parse build
   try {
@@ -122,22 +125,15 @@ export async function getBuildMatchupSpread(build, format, params) {
     enemies,
     format,
     params,
-    build.Moves,
+    removeStatusMoves(build.Moves),
     build
   );
-  let matchup = calculateSetMatchupSpread(build.Moves, enemyBuilds);
+  let matchup = {
+    matchup: calculateSetMatchupSpread(build.Moves, enemyBuilds),
+    moves: build.Moves
+  };
   return cleanUpMatchupOutput(matchup);
 }
-export function getFilteredMoveList(pokemonData, level, generation) {
-  return pokemonData.moves.filter(moveEntry =>
-    moveEntry.version_group_details.some(
-      vgd =>
-        vgd.level_learned_at <= level &&
-        getGenerationFromName(vgd.version_group.name) == generation
-    )
-  );
-}
-
 export function parsePokePaste(pokePaste) {
   //We're constructing a pokemon with some defaults here.
   let pokemon = {
@@ -400,7 +396,18 @@ function isGrounded(pokemon) {
 function isDefensivelyRelevantItem(item) {
   //@todo Add berries
   //@todo Add leftovers
-  let defensivelyRelevantItems = ['Air Balloon', 'Assault Vest', 'Focus Sash'];
+  let defensivelyRelevantItems = [
+    'Air Balloon',
+    'Assault Vest',
+    'Focus Sash',
+    'Leftovers',
+    'Choice Band',
+    'Deep Sea Scale',
+    'Eviolite',
+    'Light Ball',
+    'Soul Dew',
+    'Thick Club'
+  ];
   return defensivelyRelevantItems.some(n => n == item);
 }
 function isDefensivelyRelevantAbility(ability) {
@@ -477,7 +484,6 @@ function monHasAbilities(mon, abilities) {
   });
   return hasAbility;
 }
-
 function monHasAbility(mon, ability) {
   //Check format of mon
   if (mon.Ability != undefined) {
@@ -725,7 +731,10 @@ async function GetDataSet(build, format, params) {
   }
 
   //Get pokemon data about the pokemon from pokeAPI
-  let pokemonData = await pokeApiService.findPokemonByName(build.Pokemon);
+  let pokemonData = await pokeApiService.findPokemonByName(
+    build.Pokemon,
+    format.gen
+  );
 
   //Augment build with data
   build.Data = pokemonData;
@@ -753,7 +762,7 @@ async function GetDataSet(build, format, params) {
 }
 async function GetMoves(build, format, params) {
   //Get all legal moves
-  let moves = await getFilteredMoveList(build.Data, build.Level, format.gen);
+  let moves = build.Data.moves;
 
   //Clear build.Moves and store its moveNames separately.
   let buildMoves = build.Moves;
@@ -810,7 +819,7 @@ function trimMoves(moveList, build, gen, params) {
       !m.move.data.flags.charge &&
       !m.move.data.selfdestruct &&
       !m.move.data.flags.recharge &&
-      m.move.data.priority >= 0 &&
+      m.move.data.priority <= 0 &&
       m.move.data.basePower > 0
   );
   //#region Debug
@@ -983,18 +992,7 @@ function constructAndTestSets(
   //Check to see  if the currentSet that has been provided is complete or not.
   if (currentSet.length == 4) {
     //#region Debug
-    // console.log(
-    //   iterations++ +
-    //     ' Testing moves: ' +
-    //     currentSet[0].move.name +
-    //     ', ' +
-    //     currentSet[1].move.name +
-    //     ', ' +
-    //     currentSet[2].move.name +
-    //     ', ' +
-    //     currentSet[3].move.name +
-    //     ', '
-    // );
+    console.log('Iterations: ' + iterations++);
     //#endregion
     //If it is, we calculate its matchup spread.
     let matchup = calculateSetMatchupSpread(currentSet, enemyBuilds);
@@ -1016,21 +1014,25 @@ function constructAndTestSets(
       allMoves = [...allMoves];
       currentSet.push(allMoves[allMoves.length - 1]);
       allMoves.pop();
-      bestSet = constructAndTestSets(
-        allMoves,
-        currentSet,
-        enemyBuilds,
-        params,
-        bestSet
-      );
-      currentSet.pop();
+      //Check to stop hanging on uneven moveList lengths.
+      if (allMoves.length == 0 && currentSet.length != 4) {
+        return bestSet;
+      } else {
+        bestSet = constructAndTestSets(
+          allMoves,
+          currentSet,
+          enemyBuilds,
+          params,
+          bestSet
+        );
+        currentSet.pop();
+      }
     }
   }
 
   //At the end we return the best set we were able to find.
   return bestSet;
 }
-
 function constructEnemyBuild(
   pokemon,
   ability,
@@ -1104,11 +1106,13 @@ function constructEnemyBuild(
 
 //#region Calculators
 function calculateSetMatchupSpread(currentSet, enemyBuilds) {
+  let nonStatusMoves = removeStatusMoves(currentSet);
   //#region Debug
-  // let setName = '';
-  // currentSet.forEach(move => (setName += move.move.name + ' '));
-  // console.log('Testing set: ' + setName);
+  let setName = '';
+  nonStatusMoves.forEach(move => (setName += move.move.name + ' '));
+  console.log('Testing set: ' + setName);
   //#endregion
+  //Remove status moves.
   let matchup = {
     1: [],
     2: [],
@@ -1121,11 +1125,18 @@ function calculateSetMatchupSpread(currentSet, enemyBuilds) {
     score: 0
   };
   enemyBuilds.forEach(build => {
+    //#region Debug
+    console.log('against: ' + build.pokemon);
+    if (
+      setName == 'megakick dazzlinggleam energyball round ' &&
+      build.pokemon == 'Persian-Alola'
+    ) {
+      console.log();
+    }
+    //#endregion
     //Find the most effective we can be against that build with this set.
     let bestMatchup = undefined;
-    currentSet.forEach(move => {
-      //#region Debug
-      //#endregion
+    nonStatusMoves.forEach(move => {
       let moveEffectiveness =
         move.matchups[build.pokemon][build.ability][build.item];
       if (!bestMatchup) {
@@ -1217,7 +1228,7 @@ function calculateMoveBaseEffectiveness(moves, format, params, build) {
     //Get move data
     move.name = normalizeString(move.name); //Format to match keys in app.data.moves
     //#region Debug
-    // console.log('Calculating move: ' + move.name);
+    console.log('Calculating move: ' + move.name);
     //#endregion
     let moveData = app.data.moves[move.name]; //Get from app.data.moves cache.
     move.data = moveData; //Augment.
@@ -2291,19 +2302,20 @@ function calculateMoveDamage(
   terrain
 ) {
   //Define variables
-  let effectiveness = 1;
+  let effectiveness = move.move.data.baseEffectiveness;
   let minHitsToKO = 0;
   let maxHitsToKO = 0;
-  let minDamage = 0;
-  let maxDamage = 0;
   let AtkStage = attackerBuild.StatStages.Atk;
   let SpAStage = attackerBuild.StatStages.SpA;
 
   //#region Debug
-  // console.log('Testing ' + move.move.name + ' against ' + enemyBuild.Pokemon);
-  // if (move.move.name == 'lowkick' && enemyBuild.Pokemon == 'Landorus-Therian') {
-  //   console.log();
-  // }
+  console.log('Testing ' + move.move.name + ' against ' + enemyBuild.Pokemon);
+  if (move.move.name == 'round' && enemyBuild.Pokemon == 'Ferrothorn') {
+    console.log();
+  }
+  if (move.move.name == 'voltswitch' && enemyBuild.Pokemon == 'Persian-Alola') {
+    console.log();
+  }
   //#endregion
 
   //@todo Code logic for power-variable moves like gyro ball and grass knot.
@@ -2503,7 +2515,7 @@ function calculateMoveDamage(
     case 'Fur Coat':
       if (
         !monIgnoresAbilities(attackerBuild) &&
-        move.move.data.ignoreAbility == false
+        !move.move.data.ignoreAbility
       ) {
         enemyBuild.Stats.Def *= 1.5;
       }
@@ -2930,53 +2942,89 @@ function calculateMoveDamage(
     }
   }
 
-  //Calculate max possible dmg.
-  maxDamage =
-    ((((2 * attackerBuild.Level) / 5 + 2) *
-      move.move.data.basePower *
-      attackStat) /
-      defenseStat /
-      50 +
-      2) *
-    effectiveness *
-    typeEffectiveness;
+  //Create an array of hits-per-attack for maximum damage rolls (*1)
+  let hitsPerAttackMaxDamage = [];
+  if (move.move.data.multihit) {
+    let hits = 0;
+    let powerDoublesEachHit = false;
+    if (move.move.data.multiaccuracy) {
+      hits = move.move.data.multihit;
+      switch (move.move.name) {
+        case 'triplekick':
+        case 'tripleaxel':
+          powerDoublesEachHit = true;
+          break;
+      }
+    } else {
+      //Check for Skill Link
+      if (attackerBuild.Ability == 'Skill Link') {
+        hits = move.move.data.multihit[1];
+      } else {
+        hits =
+          move.move.data.multihit.reduce((a, b) => a + b) /
+          move.move.data.multihit.length;
+      }
+    }
+    let baseDamage = move.move.data.basePower;
+    for (let n = 0; n < hits; n++) {
+      hitsPerAttackMaxDamage.push(
+        Math.trunc(
+          calculateDamagePerHitOfMoveAgainstEnemy(
+            attackerBuild,
+            baseDamage,
+            attackStat,
+            defenseStat,
+            effectiveness,
+            typeEffectiveness
+          )
+        )
+      );
+      if (powerDoublesEachHit) {
+        baseDamage += move.move.data.basePower;
+      }
+    }
+  } else {
+    hitsPerAttackMaxDamage.push(
+      Math.trunc(
+        calculateDamagePerHitOfMoveAgainstEnemy(
+          attackerBuild,
+          move.move.data.basePower,
+          attackStat,
+          defenseStat,
+          effectiveness,
+          typeEffectiveness
+        )
+      )
+    );
+  }
 
-  maxDamage = Math.trunc(maxDamage);
+  //Create identical array for min damage rolls (*0.85)
+  let hitsPerAttackMinDamage = [];
+  hitsPerAttackMaxDamage.forEach(hit =>
+    hitsPerAttackMinDamage.push(Math.trunc(hit * 0.85))
+  );
 
-  //Calculate min possible dmg.
-  minDamage = Math.trunc(maxDamage * 0.85);
+  //Define additional return variables
+  // let minFirstHitDamagePercent = 0;
+  // let maxFirstHitDamagePercent = 0;
+  // let avgFirstHitDamagePercent = 0;
+  // let minAvgHitDamagePercent = 0;
+  // let maxAvgHitDamagePercent = 0;
+  // let avgHitDamagePercent = 0;
 
   //Calculate min hits to KO
-  let defenderHP = enemyBuild.Stats.HP;
-  while (defenderHP > 0) {
-    //Check multi-scale
-    if (
-      defenderHP == enemyBuild.Stats.HP &&
-      monHasAbilities(enemyBuild, ['Multiscale', 'Shadow Shield']) &&
-      !monIgnoresAbilities(attackerBuild)
-    ) {
-      defenderHP -= maxDamage * 0.5;
-    } else {
-      defenderHP -= maxDamage;
-    }
-    minHitsToKO++;
-  }
+  minHitsToKO = calculateHitsToKO(
+    hitsPerAttackMaxDamage,
+    enemyBuild,
+    attackerBuild
+  );
 
   //Check max hits to KO
-  defenderHP = enemyBuild.Stats.HP;
-  while (defenderHP > 0) {
-    //Check multi-scale
-    if (
-      defenderHP == enemyBuild.Stats.HP &&
-      monHasAbilities(enemyBuild, ['Multiscale', 'Shadow Shield']) &&
-      !monIgnoresAbilities(attackerBuild)
-    ) {
-      defenderHP -= minDamage * 0.5;
-    } else {
-      defenderHP -= minDamage;
-    }
-    maxHitsToKO++;
-  }
+  maxHitsToKO = calculateHitsToKO(
+    hitsPerAttackMinDamage,
+    enemyBuild,
+    attackerBuild
+  );
 
   //Before returning, check for sturdy or focus sash.
   if (
@@ -2997,9 +3045,93 @@ function calculateMoveDamage(
   }
 
   return {
-    DamageRange: { min: minDamage, max: maxDamage },
-    hitsToKO: { min: minHitsToKO, max: maxHitsToKO }
+    DamageRange: {
+      min: maxHitsToKO.lowestDamageTurn,
+      max: minHitsToKO.highestDamageTurn
+    },
+    hitsToKO: { min: minHitsToKO.attacksToKO, max: maxHitsToKO.attacksToKO }
   };
+}
+function calculateDamagePerHitOfMoveAgainstEnemy(
+  attackerBuild,
+  basePower,
+  attackStat,
+  defenseStat,
+  effectiveness,
+  typeEffectiveness
+) {
+  return (
+    ((((2 * attackerBuild.Level) / 5 + 2) * basePower * attackStat) /
+      defenseStat /
+      50 +
+      2) *
+    effectiveness *
+    typeEffectiveness
+  );
+}
+function calculateHitsToKO(hitsPerAttack, enemyBuild, attackerBuild) {
+  let attacksToKO = 0;
+  let highestDamageTurn = 0;
+  let lowestDamageTurn = null;
+  //Define health regen in the case of leftovers
+  let healthRegen = Math.trunc(enemyBuild.Stats.HP * (1 / 16));
+  if (hitsPerAttack.some(hit => hit > 0)) {
+    let defenderHP = enemyBuild.Stats.HP;
+    while (defenderHP > 0) {
+      let damageDealtThisAttack = 0;
+      hitsPerAttack.forEach(hit => {
+        let damageDealtThisHit = applyDamage(
+          hit,
+          attackerBuild,
+          enemyBuild,
+          defenderHP
+        );
+        defenderHP -= damageDealtThisHit;
+        damageDealtThisAttack += damageDealtThisHit;
+      });
+      highestDamageTurn =
+        highestDamageTurn < damageDealtThisAttack
+          ? damageDealtThisAttack
+          : highestDamageTurn;
+      lowestDamageTurn =
+        lowestDamageTurn == null ? damageDealtThisAttack : lowestDamageTurn;
+      lowestDamageTurn =
+        lowestDamageTurn > damageDealtThisAttack
+          ? damageDealtThisAttack
+          : lowestDamageTurn;
+      attacksToKO++;
+
+      //Check for and apply Leftovers
+      if (enemyBuild.Item == 'Leftovers' && defenderHP > 0) {
+        if (healthRegen >= damageDealtThisAttack) {
+          return {
+            attacksToKO: null,
+            highestDamageTurn: highestDamageTurn,
+            lowestDamageTurn: lowestDamageTurn
+          };
+        }
+        defenderHP += healthRegen;
+      }
+    }
+  } else {
+    attacksToKO = null;
+  }
+  return {
+    attacksToKO: attacksToKO,
+    highestDamageTurn: highestDamageTurn,
+    lowestDamageTurn: lowestDamageTurn
+  };
+}
+function applyDamage(damagePerHit, attackerBuild, enemyBuild, defenderHP) {
+  if (
+    defenderHP == enemyBuild.Stats.HP &&
+    monHasAbilities(enemyBuild, ['Multiscale', 'Shadow Shield']) &&
+    !monIgnoresAbilities(attackerBuild)
+  ) {
+    return damagePerHit * 0.5;
+  } else {
+    return damagePerHit;
+  }
 }
 function calculateMoveListDamageVsEnemyBuilds(
   enemies,
@@ -3013,6 +3145,7 @@ function calculateMoveListDamageVsEnemyBuilds(
   enemyNames.forEach(e => {
     let enemy = enemies[e];
     //#region Debug
+    console.log('Building sets for: ' + e);
     //#endregion
     let baseStats = app.data.pokedex[normalizeString(e)].baseStats;
     let likelyAbilities = [];
@@ -3152,10 +3285,10 @@ function calculateMoveListDamageVsEnemyBuilds(
     likelySets.forEach(set => {
       allMoves.forEach(move => {
         //#region Debug
-        // console.log('Testing ' + move.move.name + ' against ' + set.Pokemon);
-        // if (move.move.name == 'grassknot' && set.Pokemon == 'Ferrothorn') {
-        //   console.log();
-        // }
+        console.log('Testing ' + move.move.name + ' against ' + set.Pokemon);
+        if (move.move.name == 'payback' && set.Pokemon == 'Persian-Alola') {
+          console.log();
+        }
         //#endregion
         if (!move.matchups) {
           move.matchups = {};
@@ -3270,33 +3403,6 @@ function convertStatShorthand(statString) {
       return 'speed';
   }
 }
-function getGenerationFromName(gameName) {
-  if (gameName == 'red-blue' || gameName == 'yellow') {
-    return 1;
-  } else if (gameName == 'gold-silver' || gameName == 'crystal') {
-    return 2;
-  } else if (
-    gameName == 'ruby-sapphire' ||
-    gameName == 'emerald' ||
-    gameName == 'firered-leafgreen'
-  ) {
-    return 3;
-  } else if (
-    gameName == 'diamond-pearl' ||
-    gameName == 'platinum' ||
-    gameName == 'heartgold-soulsilver'
-  ) {
-    return 4;
-  } else if (gameName == 'black-white' || gameName == 'black-2-white-2') {
-    return 5;
-  } else if (gameName == 'x-y' || gameName == 'omega-ruby-alpha-sapphire') {
-    return 6;
-  } else if (gameName == 'sun-moon' || gameName == 'ultra-sun-ultra-moon') {
-    return 7;
-  } else {
-    return 8;
-  }
-}
 function normalizeString(input) {
   //Removes special characters and returns lower-case string.
   let regex = /[^a-zA-Z]/i;
@@ -3327,9 +3433,52 @@ function cleanUpMatchupOutput(matchup) {
   matchup = { moves: matchup.moves, matchups: matchup.matchup };
   return matchup;
 }
+function removeStatusMoves(moves) {
+  moves = moves.filter(m => m.move.data.category != 'Status');
+  return moves;
+}
+
 //#endregion
 
 //#region Currently Unused
+// function getGenerationFromName(gameName) {
+//   if (gameName == 'red-blue' || gameName == 'yellow') {
+//     return 1;
+//   } else if (gameName == 'gold-silver' || gameName == 'crystal') {
+//     return 2;
+//   } else if (
+//     gameName == 'ruby-sapphire' ||
+//     gameName == 'emerald' ||
+//     gameName == 'firered-leafgreen'
+//   ) {
+//     return 3;
+//   } else if (
+//     gameName == 'diamond-pearl' ||
+//     gameName == 'platinum' ||
+//     gameName == 'heartgold-soulsilver'
+//   ) {
+//     return 4;
+//   } else if (gameName == 'black-white' || gameName == 'black-2-white-2') {
+//     return 5;
+//   } else if (gameName == 'x-y' || gameName == 'omega-ruby-alpha-sapphire') {
+//     return 6;
+//   } else if (gameName == 'sun-moon' || gameName == 'ultra-sun-ultra-moon') {
+//     return 7;
+//   } else {
+//     return 8;
+//   }
+// }
+
+// export function getFilteredMoveList(pokemonData, level, generation) {
+//   return pokemonData.moves.filter(moveEntry =>
+//     moveEntry.version_group_details.some(
+//       vgd =>
+//         vgd.level_learned_at <= level &&
+//         getGenerationFromName(vgd.version_group.name) == generation
+//     )
+//   );
+//
+
 // function getNamesOfGeneration(generation) {
 //   switch (generation) {
 //     case 1:
