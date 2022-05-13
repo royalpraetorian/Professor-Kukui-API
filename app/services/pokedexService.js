@@ -2891,6 +2891,11 @@ function calculateMoveDamage(
       DamageRange: { min: null, max: null },
       hitsToKO: { min: null, max: null }
     };
+  } else if (typeEffectiveness <= 2 && enemyBuild.Ability == 'Wonder Guard') {
+    return {
+      DamageRange: { min: null, max: null },
+      hitsToKO: { min: null, max: null }
+    };
   }
 
   //Apply stat stages. Critical hits ignore negative stat stages on the attacker and positive stat stages on the defender.
@@ -3008,12 +3013,6 @@ function calculateMoveListDamageVsEnemyBuilds(
   enemyNames.forEach(e => {
     let enemy = enemies[e];
     //#region Debug
-    if (enemy.usage.raw <= 0.0044) {
-      console.log();
-    }
-    if (e == 'Shedinja') {
-      console.log();
-    }
     //#endregion
     let baseStats = app.data.pokedex[normalizeString(e)].baseStats;
     let likelyAbilities = [];
@@ -3108,6 +3107,10 @@ function calculateMoveListDamageVsEnemyBuilds(
         likelyItems.push(item);
       }
     });
+
+    if (likelyItems.length <= 0) {
+      likelyItems.push(items[0]);
+    }
 
     //Construct a set for each ability and item combination.
     let likelySets = [];
