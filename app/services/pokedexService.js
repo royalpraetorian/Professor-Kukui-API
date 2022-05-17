@@ -76,7 +76,7 @@ export async function findOptimalBuild(build, format, params) {
 
   //Parse format
   format = parseFormat(format);
-  let dataSet = await GetDataSet(build, format, params);
+  let dataSet = await getDataSet(build, format, params);
   build = dataSet.build;
   let allMoves = dataSet.legalMoves;
   let enemies = dataSet.enemies;
@@ -100,7 +100,7 @@ export async function findOptimalBuild(build, format, params) {
     build
   );
 
-  let bestSet = constructAndTestSets(allMoves, [], enemyBuilds, params);
+  let bestSet = constructAndTestSets(allMoves, [], enemyBuilds, params, build);
   //#region Debug
   console.log(
     'Tested ' + iterations + ' sets of ' + allMoves.length + ' moves'
@@ -117,7 +117,7 @@ export async function getBuildMatchupSpread(build, format, params) {
   }
   //Parse format
   format = parseFormat(format);
-  let dataSet = await GetDataSet(build, format, params);
+  let dataSet = await getDataSet(build, format, params);
   build = dataSet.build;
   let enemies = dataSet.enemies;
 
@@ -551,7 +551,8 @@ function checkTypeEffectiveness(attackType, defenseType, generation) {
         1: 2
       },
       Grass: 2,
-      Fairy: 2
+      Fairy: 2,
+      Steel: 0
     },
     Ground: {
       Poison: 2,
@@ -722,7 +723,7 @@ function checkTypeEffectiveness(attackType, defenseType, generation) {
 //#endregion
 
 //#region Data
-async function GetDataSet(build, format, params) {
+async function getDataSet(build, format, params) {
   //Try to parse format into gen and tier
   try {
     format = parseFormat(format);
@@ -749,18 +750,18 @@ async function GetDataSet(build, format, params) {
   });
 
   //Construct and augment Final Stats (Factor items and abilities, like Flare Boost)
-  build = CalculateStats(build, format);
+  build = calculateStats(build, format);
 
   //Get moves
-  let moves = await GetMoves(build, format, params);
+  let moves = await getMoves(build, format, params);
   build = moves.build;
   let legalMoves = moves.legalMoves;
 
   //Get enemies
-  let enemies = await GetEnemies(format, params);
+  let enemies = await getEnemies(format, params);
   return { build: build, legalMoves: legalMoves, enemies: enemies };
 }
-async function GetMoves(build, format, params) {
+async function getMoves(build, format, params) {
   //Get all legal moves
   let moves = build.Data.moves;
 
@@ -777,7 +778,7 @@ async function GetMoves(build, format, params) {
   );
   return { build: build, legalMoves: moves };
 }
-async function GetEnemies(format, params) {
+async function getEnemies(format, params) {
   let enemies = [];
   //Get a list of all enemies that exist in this format
   let metagame = await showdownService.getMetagame(
@@ -969,11 +970,47 @@ function trimMoves(moveList, build, gen, params) {
 
   return bestMoves;
 }
+
+function constructSetWithForcedMoves(allMoves, currentSet, params, build) {
+  /*This will only ever be called in currentSet.length < 4. This method will return the new currentSet most of the time.
+  If this method runs but cannot add a move to a set (meaning it meets all of the user param's requirements) it will return true or false.
+  It will return true in this case if it cannot add a move because all the conditions are already met.
+  It will instead return false if it cannot add a move but the conditions are not met.
+  */
+  //Define return value
+  let returnSet = [...currentSet];
+  if (params.moves.STAB == 'force') {
+    let stabMoves = [];
+    //Construct a set with an attack of each of the attacker's types.
+    let hasStabMoves = true;
+    build.Types.forEach(type => {
+      if (!currentSet.some(move => move.move.data.type == type)) {
+        hasStabMoves = false;
+        allMoves
+          .filter(m => m.move.data.type == type)
+          .forEach(m => stabMoves.push(m));
+      }
+    });
+
+    if (hasStabMoves) {
+      return true;
+    } else if (stabMoves.length > 0) {
+      //Add one of the moves, remove it from allMoves, and return the new set.
+      returnSet.push(stabMoves[0]);
+      return returnSet;
+    }
+  }
+
+  //If we were unable to add any moves to the provided set, but it meets all the conditions specified in params, we return true.
+  return false;
+}
+
 function constructAndTestSets(
   allMoves,
   currentSet,
   enemyBuilds,
   params,
+  build,
   bestSet = null
 ) {
   /*This function is recursive.
@@ -1011,21 +1048,68 @@ function constructAndTestSets(
   } else {
     //If it's not, while allMoves still has moves in it, we add one to the set, remove it from allMoves, and recurse.
     while (allMoves.length > 0) {
-      allMoves = [...allMoves];
-      currentSet.push(allMoves[allMoves.length - 1]);
-      allMoves.pop();
-      //Check to stop hanging on uneven moveList lengths.
-      if (allMoves.length == 0 && currentSet.length != 4) {
-        return bestSet;
-      } else {
-        bestSet = constructAndTestSets(
+      //First check if the user is forcing any moves.
+      let forcedMoves = false;
+      Object.keys(params.moves).forEach(key => {
+        if (params.moves[key] == 'force') {
+          forcedMoves = true;
+        }
+      });
+      if (forcedMoves) {
+        let newSet = constructSetWithForcedMoves(
           allMoves,
           currentSet,
-          enemyBuilds,
           params,
-          bestSet
+          build
         );
-        currentSet.pop();
+        if (newSet === true) {
+          /*If the above method returns false rather than a new set of moves, that means all the conditions are met.
+          To make things easier, we will set forcedMoves to false here, indicating that we do not need to recurse yet.
+          This allows us to move to the normal recursive method of adding moves.
+          */
+          forcedMoves = false;
+        } else if (newSet === false) {
+          /* If the above method returns false, instead, rather than a new set of moves, that means the conditions were not met,
+          and could not be met. In this case we can no longer build a valid set, so we return best set.
+          */
+          return bestSet;
+        } else {
+          //Remove any moves in the current set from allMoves
+          allMoves = [...allMoves];
+          newSet.forEach(move => {
+            if (allMoves.some(m => m == move)) {
+              allMoves.splice(allMoves.indexOf(move), 1);
+            }
+          });
+          bestSet = constructAndTestSets(
+            allMoves,
+            newSet,
+            enemyBuilds,
+            params,
+            build,
+            bestSet
+          );
+        }
+      }
+
+      if (!forcedMoves) {
+        allMoves = [...allMoves];
+        currentSet.push(allMoves[allMoves.length - 1]);
+        allMoves.pop();
+        //Check to stop hanging on uneven moveList lengths.
+        if (allMoves.length == 0 && currentSet.length != 4) {
+          return bestSet;
+        } else {
+          bestSet = constructAndTestSets(
+            allMoves,
+            currentSet,
+            enemyBuilds,
+            params,
+            build,
+            bestSet
+          );
+          currentSet.pop();
+        }
       }
     }
   }
@@ -1091,7 +1175,7 @@ function constructEnemyBuild(
     });
   }
 
-  build = CalculateStats(build, { gen: gen });
+  build = calculateStats(build, { gen: gen });
 
   if (build.defBoostNature) {
     build.Stats.Def = Math.trunc(build.Stats.Def * 1.1);
@@ -1111,6 +1195,15 @@ function calculateSetMatchupSpread(currentSet, enemyBuilds) {
   let setName = '';
   nonStatusMoves.forEach(move => (setName += move.move.name + ' '));
   console.log('Testing set: ' + setName);
+  if (
+    currentSet.some(
+      m =>
+        m.move.name == 'earthpower' &&
+        currentSet.some(m => m.move.name == 'earthquake')
+    )
+  ) {
+    console.log();
+  }
   //#endregion
   //Remove status moves.
   let matchup = {
@@ -1126,7 +1219,6 @@ function calculateSetMatchupSpread(currentSet, enemyBuilds) {
   };
   enemyBuilds.forEach(build => {
     //#region Debug
-    console.log('against: ' + build.pokemon);
     if (
       setName == 'megakick dazzlinggleam energyball round ' &&
       build.pokemon == 'Persian-Alola'
@@ -1229,6 +1321,9 @@ function calculateMoveBaseEffectiveness(moves, format, params, build) {
     move.name = normalizeString(move.name); //Format to match keys in app.data.moves
     //#region Debug
     console.log('Calculating move: ' + move.name);
+    if (move.name == 'fireblast') {
+      console.log();
+    }
     //#endregion
     let moveData = app.data.moves[move.name]; //Get from app.data.moves cache.
     move.data = moveData; //Augment.
@@ -1972,7 +2067,7 @@ function calculateMoveBaseEffectiveness(moves, format, params, build) {
         STAB = true;
       } else {
         if (build.Types.length > 1) {
-          if (build.Types.includes(move.type)) {
+          if (build.Types.some(type => type == move.data.type)) {
             STAB = true;
           }
         } else {
@@ -2080,7 +2175,7 @@ function calculateAverageDamageOutput(build, move) {
 
   return averageDamageOutput;
 }
-function CalculateStats(build, format) {
+function calculateStats(build, format) {
   //Declare Stats
   build.Stats = {};
 
@@ -2316,6 +2411,12 @@ function calculateMoveDamage(
   if (move.move.name == 'voltswitch' && enemyBuild.Pokemon == 'Persian-Alola') {
     console.log();
   }
+  if (
+    (move.move.name == 'fireblast' || move.move.name == 'focusblast') &&
+    enemyBuild.Pokemon == 'Melmetal'
+  ) {
+    console.log();
+  }
   //#endregion
 
   //@todo Code logic for power-variable moves like gyro ball and grass knot.
@@ -2400,7 +2501,7 @@ function calculateMoveDamage(
       if (
         move.move.data.type == 'Fire' &&
         !monIgnoresAbilities(attackerBuild) &&
-        move.move.data.ignoreAbility == false
+        !move.move.data.ignoreAbility
       ) {
         return {
           DamageRange: { min: null, max: null },
@@ -2412,7 +2513,7 @@ function calculateMoveDamage(
     case 'Shell Armor':
       if (
         !monIgnoresAbilities(attackerBuild) &&
-        move.move.data.ignoreAbility == false
+        !move.move.data.ignoreAbility
       ) {
         move.move.data.willCrit = false;
       }
@@ -2421,7 +2522,7 @@ function calculateMoveDamage(
       if (
         move.move.data.flags.bullet == true &&
         !monIgnoresAbilities(attackerBuild) &&
-        move.move.data.ignoreAbility == false
+        !move.move.data.ignoreAbility
       ) {
         return {
           DamageRange: { min: null, max: null },
@@ -2433,7 +2534,7 @@ function calculateMoveDamage(
       if (
         move.move.data.selfdestruct == 'always' &&
         !monIgnoresAbilities(attackerBuild) &&
-        move.move.data.ignoreAbility == false
+        !move.move.data.ignoreAbility
       ) {
         return {
           DamageRange: { min: null, max: null },
@@ -2446,7 +2547,7 @@ function calculateMoveDamage(
       if (
         move.move.data.priority > 0 &&
         !monIgnoresAbilities(attackerBuild) &&
-        move.move.data.ignoreAbility == false
+        !move.move.data.ignoreAbility
       ) {
         return {
           DamageRange: { min: null, max: null },
@@ -2457,7 +2558,7 @@ function calculateMoveDamage(
     case 'Disguise':
       if (
         !monIgnoresAbilities(attackerBuild) &&
-        move.move.data.ignoreAbility == false
+        !move.move.data.ignoreAbility
       ) {
         if (move.move.data.multihit != undefined) {
           //If the move is multihit, we subtract one of its hits.
@@ -2477,7 +2578,7 @@ function calculateMoveDamage(
     case 'Dry Skin':
       if (
         !monIgnoresAbilities(attackerBuild) &&
-        move.move.data.ignoreAbility == false
+        !move.move.data.ignoreAbility
       ) {
         if (move.move.data.type == 'Fire') {
           effectiveness *= 1.25;
@@ -2493,7 +2594,7 @@ function calculateMoveDamage(
       if (
         weather == 'Sun' &&
         !monIgnoresAbilities(attackerBuild) &&
-        move.move.data.ignoreAbility == false
+        !move.move.data.ignoreAbility
       ) {
         enemyBuild.Stats.SpA *= 1.5;
       }
@@ -2502,7 +2603,7 @@ function calculateMoveDamage(
       if (
         (move.move.data.type == 'Fire' || move.move.data.flags.contact) &&
         !monIgnoresAbilities(attackerBuild) &&
-        move.move.data.ignoreAbility == false
+        !move.move.data.ignoreAbility
       ) {
         if (move.move.data.type == 'Fire') {
           effectiveness *= 2;
@@ -2524,7 +2625,7 @@ function calculateMoveDamage(
       if (
         move.move.data.type == 'Fire' &&
         !monIgnoresAbilities(attackerBuild) &&
-        move.move.data.ignoreAbility == false
+        !move.move.data.ignoreAbility
       ) {
         enemyBuild.Stats.SpA *= 1.5;
       }
@@ -2532,7 +2633,7 @@ function calculateMoveDamage(
     case 'Heavy Metal':
       if (
         !monIgnoresAbilities(attackerBuild) &&
-        move.move.data.ignoreAbility == false
+        !move.move.data.ignoreAbility
       ) {
         //@todo Double enemy's weight.
       }
@@ -2541,7 +2642,7 @@ function calculateMoveDamage(
       if (
         move.move.data.category == 'Physical' &&
         !monIgnoresAbilities(attackerBuild) &&
-        move.move.data.ignoreAbility == false
+        !move.move.data.ignoreAbility
       ) {
         if (move.move.data.multihit) {
           try {
@@ -2560,7 +2661,7 @@ function calculateMoveDamage(
       if (
         move.move.data.category == 'Special' &&
         !monIgnoresAbilities(attackerBuild) &&
-        move.move.data.ignoreAbility == false
+        !move.move.data.ignoreAbility
       ) {
         effectiveness *= 0.5;
       }
@@ -2569,7 +2670,7 @@ function calculateMoveDamage(
       if (
         move.move.data.type == 'Ground' &&
         !monIgnoresAbilities(attackerBuild) &&
-        move.move.data.ignoreAbility == false
+        move.move.data.ignoreAbility != true
       ) {
         return {
           DamageRange: { min: null, max: null },
@@ -2580,7 +2681,7 @@ function calculateMoveDamage(
     case 'Light Metal':
       if (
         !monIgnoresAbilities(attackerBuild) &&
-        move.move.data.ignoreAbility == false
+        !move.move.data.ignoreAbility
       ) {
         //@todo halve weight.
       }
@@ -2591,7 +2692,7 @@ function calculateMoveDamage(
       if (
         move.move.data.type == 'Electric' &&
         !monIgnoresAbilities(attackerBuild) &&
-        move.move.data.ignoreAbility == false
+        !move.move.data.ignoreAbility
       ) {
         return {
           DamageRange: { min: null, max: null },
@@ -2603,7 +2704,7 @@ function calculateMoveDamage(
       if (
         move.move.data.category == 'Physical' &&
         !monIgnoresAbilities(attackerBuild) &&
-        move.move.data.ignoreAbility == false
+        !move.move.data.ignoreAbility
       ) {
         enemyBuild.Stats.Def *= 1.5;
       }
@@ -2611,7 +2712,7 @@ function calculateMoveDamage(
     case 'Multiscale':
       if (
         !monIgnoresAbilities(attackerBuild) &&
-        move.move.data.ignoreAbility == false
+        !move.move.data.ignoreAbility
       ) {
         //@todo How on earth am I going to do multiscale?
         //Consider making this method recursive?
@@ -2621,7 +2722,7 @@ function calculateMoveDamage(
       if (
         move.move.data.flags.sound &&
         !monIgnoresAbilities(attackerBuild) &&
-        move.move.data.ignoreAbility == false
+        !move.move.data.ignoreAbility
       ) {
         effectiveness *= 0.5;
       }
@@ -2630,7 +2731,7 @@ function calculateMoveDamage(
       if (
         move.move.data.type == 'Grass' &&
         !monIgnoresAbilities(attackerBuild) &&
-        move.move.data.ignoreAbility == false
+        !move.move.data.ignoreAbility
       ) {
         return {
           DamageRange: { min: null, max: null },
@@ -2642,7 +2743,7 @@ function calculateMoveDamage(
       if (
         move.move.data.flags.sound &&
         !monIgnoresAbilities(attackerBuild) &&
-        move.move.data.ignoreAbility == false
+        !move.move.data.ignoreAbility
       ) {
         return {
           DamageRange: { min: null, max: null },
@@ -2655,7 +2756,7 @@ function calculateMoveDamage(
       if (
         move.move.data.type == 'Water' &&
         !monIgnoresAbilities(attackerBuild) &&
-        move.move.data.ignoreAbility == false
+        !move.move.data.ignoreAbility
       ) {
         return {
           DamageRange: { min: null, max: null },
@@ -2667,7 +2768,7 @@ function calculateMoveDamage(
       if (
         (move.move.data.type == 'Fire' || move.move.data.type == 'Ice') &&
         !monIgnoresAbilities(attackerBuild) &&
-        move.move.data.ignoreAbility == false
+        !move.move.data.ignoreAbility
       ) {
         effectiveness *= 0.5;
       }
@@ -2676,7 +2777,7 @@ function calculateMoveDamage(
       if (
         move.move.data.type == 'Fire' &&
         !monIgnoresAbilities(attackerBuild) &&
-        move.move.data.ignoreAbility == false
+        !move.move.data.ignoreAbility
       ) {
         effectiveness *= 0.5;
       }
@@ -2941,6 +3042,10 @@ function calculateMoveDamage(
       defenseStat = enemyBuild.Stats.SpD;
     }
   }
+
+  //Truncate stats
+  attackStat = Math.trunc(attackStat);
+  defenseStat = Math.trunc(defenseStat);
 
   //Create an array of hits-per-attack for maximum damage rolls (*1)
   let hitsPerAttackMaxDamage = [];
