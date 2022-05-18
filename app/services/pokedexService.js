@@ -91,6 +91,13 @@ export async function findOptimalBuild(build, format, params) {
   //- Also remove status moves from current build.
   allMoves = trimMoves(allMoves, build, format.gen, params.moves);
 
+  //Add back in non-status moves in the pokemon's build.
+  build.Moves.forEach(move => {
+    if (move.move.data.category != 'Status' && !allMoves.some(m => m == move)) {
+      allMoves.push(move);
+    }
+  });
+
   //Define each enemy build we are measuring effectiveness against
   let enemyBuilds = [];
 
@@ -103,7 +110,13 @@ export async function findOptimalBuild(build, format, params) {
     build
   );
 
-  let bestSet = constructAndTestSets(allMoves, [], enemyBuilds, params, build);
+  let bestSet = constructAndTestSets(
+    allMoves,
+    build.Moves,
+    enemyBuilds,
+    params,
+    build
+  );
   bestSet = cleanUpMatchupOutput(bestSet);
   //#region Debug
   console.log(
@@ -324,7 +337,6 @@ So we parse the first line as a special case, then loop for i=1; i<lines.legnth;
   }
   return pokemon;
 }
-
 export async function findFasterPokemon(speed, format) {
   try {
     format = parseFormat(format);
@@ -752,6 +764,76 @@ async function getDataSet(build, format, params) {
   build.Data = pokemonData;
   build.Types = app.data.pokedex[normalizeString(build.Pokemon)].types;
 
+  //Check for type-altering items on Arceus, and Silvally
+  switch (true) {
+    case build.Pokemon.includes('Arceus'):
+      switch (build.Item) {
+        case 'Blank Plate':
+          build.Types = ['Normal'];
+          break;
+        case 'Draco Plate':
+          build.Types = ['Dragon'];
+          break;
+        case 'Dread Plate':
+          build.Types = ['Dark'];
+          break;
+        case 'Earth Plate':
+          build.Types = ['Ground'];
+          break;
+        case 'Fist Plate':
+          build.Types = ['Fighting'];
+          break;
+        case 'Flame Plate':
+          build.Types = ['Fire'];
+          break;
+        case 'Icicle Plate':
+          build.Types = ['Ice'];
+          break;
+        case 'Insect Plate':
+          build.Types = ['Bug'];
+          break;
+        case 'Iron Plate':
+          build.Types = ['Steel'];
+          break;
+        case 'Meadow Plate':
+          build.Types = ['Grass'];
+          break;
+        case 'Mind Plate':
+          build.Types = ['Psychic'];
+          break;
+        case 'Pixie Plate':
+          build.Types = ['Fairy'];
+          break;
+        case 'Sky Plate':
+          build.Types = ['Flying'];
+          break;
+        case 'Splash Plate':
+          build.Types = ['Water'];
+          break;
+        case 'Spooky Plate':
+          build.Types = ['Ghost'];
+          break;
+        case 'Stone Plate':
+          build.Types = ['Rock'];
+          break;
+        case 'Toxic Plate':
+          build.Types = ['Poison'];
+          break;
+        case 'Zap Plate':
+          build.Types = ['Electric'];
+          break;
+      }
+      break;
+    case build.Pokemon.includes('Silvally'):
+      if (build.Item.includes('Memory')) {
+        //Luckily all of Silvally's Memories contain their type as the first word in their string.
+        let regex = /[A-Za-z]*(?= )/g;
+        let type = build.Item.match(regex)[0];
+        build.Types = [type];
+      }
+      break;
+  }
+
   //Add expected stat changes and status effects.
   build.Status = params.status;
   build.StatStages = {};
@@ -824,17 +906,15 @@ function trimMoves(moveList, build, gen, params) {
   //Get opponent-variable moves like Foul Play, Gyro Ball, etc, and add them to their own list to be re-added at the end.
   const opponentVariableMoveNames = [
     // 'Gyro Ball',
-    // 'Grass Knot',
     // 'Electro Ball',
-    // 'Heavy Slam',
-    // 'Magnitude',
     // 'Natural Gift',
     // 'Nature Power',
     // 'Hidden Power',
-    // 'Wring Out',
-    // 'Punishment',
-    // 'Heat Crash',
     // 'Return',
+    // 'Frustration',
+    'Heavy Slam',
+    'Heat Crash',
+    'Grass Knot',
     'Low Kick',
     'Knock Off',
     'Foul Play'
@@ -852,7 +932,7 @@ function trimMoves(moveList, build, gen, params) {
       !m.move.data.flags.recharge &&
       m.move.data.priority >= 0 &&
       m.move.data.basePower > 0 &&
-      opponentVariableMoves.some(n => n != m)
+      !opponentVariableMoves.some(n => n == m)
   );
   //#region Debug
   //#endregion
@@ -865,6 +945,7 @@ function trimMoves(moveList, build, gen, params) {
   );
   //Remove all moves with a lower accuracy than the user's tolerance.
   //Accuracy is sometimes stored as 'true' rather than 100, for moves that cannot have their accuracy reduced.
+  //@todo Impliment No Guard check.
   moveList = moveList.filter(
     m =>
       m.move.data.accuracy == true ||
@@ -936,7 +1017,7 @@ function trimMoves(moveList, build, gen, params) {
     //For each of the two categories,
     types.forEach(type => {
       //#region Debug
-      if (category == 'Physical' && type == 'Ice') {
+      if (category == 'Physical' && type == 'Steel') {
         console.log();
       }
       //#endregion
@@ -1542,16 +1623,16 @@ function calculateMovesBaseEffectiveness(moves, format, params, build) {
           if (move.data.type == 'Normal') {
             move.data.type = 'Flying';
             if (Number(format.gen) > 5) {
-              baseEffectiveness *= 1.2;
+              move.data.basePower = Math.trunc(move.data.basePower * 1.2);
             } else {
-              baseEffectiveness *= 1.3;
+              move.data.basePower = Math.trunc(move.data.basePower * 1.3);
             }
           }
           break;
         case 'Galvanize':
           if (move.data.type == 'Normal') {
             move.data.type = 'Electric';
-            baseEffectiveness *= 1.2;
+            move.data.basePower = Math.trunc(move.data.basePower * 1.2);
           }
           break;
         case 'Liquid Voice':
@@ -1563,9 +1644,9 @@ function calculateMovesBaseEffectiveness(moves, format, params, build) {
           if (move.data.type == 'Normal') {
             move.data.type = 'Fairy';
             if (Number(format.gen) > 5) {
-              baseEffectiveness *= 1.2;
+              move.data.basePower = Math.trunc(move.data.basePower * 1.2);
             } else {
-              baseEffectiveness *= 1.3;
+              move.data.basePower = Math.trunc(move.data.basePower * 1.3);
             }
           }
           break;
@@ -1573,66 +1654,66 @@ function calculateMovesBaseEffectiveness(moves, format, params, build) {
           if (move.data.type == 'Normal') {
             move.data.type = 'Ice';
             if (Number(format.gen) > 5) {
-              baseEffectiveness *= 1.2;
+              move.data.basePower = Math.trunc(move.data.basePower * 1.2);
             } else {
-              baseEffectiveness *= 1.3;
+              move.data.basePower = Math.trunc(move.data.basePower * 1.3);
             }
           }
           break;
         //Abilities that increase damage based on other flags
         case "Dragon's Maw":
           if (move.data.type == 'Dragon') {
-            baseEffectiveness *= 1.5;
+            move.data.basePower = Math.trunc(move.data.basePower * 1.5);
           }
           break;
         case 'Iron Fist':
           if (move.data.flags.punch == 1) {
-            baseEffectiveness *= 1.2;
+            move.data.basePower = Math.trunc(move.data.basePower * 1.2);
           }
           break;
         case 'Mega Launcher':
           if (move.data.flags.aura == 1 || move.data.flags.pulse == 1) {
-            baseEffectiveness *= 1.5;
+            move.data.basePower = Math.trunc(move.data.basePower * 1.5);
           }
           break;
         case 'Punk Rock':
           if (move.data.flags.sound == 1) {
-            baseEffectiveness *= 1.3;
+            move.data.basePower = Math.trunc(move.data.basePower * 1.3);
           }
           break;
         case 'Reckless':
           if (move.data.recoil != null || move.data.hasCrashDamage) {
-            baseEffectiveness *= 1.2;
+            move.data.basePower = Math.trunc(move.data.basePower * 1.2);
           }
           break;
         case 'Sheer Force':
           if (move.data.secondary != null) {
-            baseEffectiveness *= 1.3;
+            move.data.basePower = Math.trunc(move.data.basePower * 1.3);
           }
           break;
         case 'Steelworker':
           if (move.data.type == 'Steel') {
-            baseEffectiveness *= 1.5;
+            move.data.basePower = Math.trunc(move.data.basePower * 1.5);
           }
           break;
         case 'Strong Jaw':
           if (move.data.flags.bite == 1) {
-            baseEffectiveness *= 1.5;
+            move.data.basePower = Math.trunc(move.data.basePower * 1.5);
           }
           break;
         case 'Technician':
           if (move.data.basePower <= 60) {
-            baseEffectiveness *= 1.5;
+            move.data.basePower = Math.trunc(move.data.basePower * 1.5);
           }
           break;
         case 'Tough Claws':
           if (move.data.flags.contact == 1) {
-            baseEffectiveness *= 1.3;
+            move.data.basePower = Math.trunc(move.data.basePower * 1.3);
           }
           break;
         case 'Transistor':
           if (move.data.type == 'Electric') {
-            baseEffectiveness *= 1.5;
+            move.data.basePower = Math.trunc(move.data.basePower * 1.5);
           }
           break;
         case 'Super Luck':
@@ -1642,6 +1723,18 @@ function calculateMovesBaseEffectiveness(moves, format, params, build) {
             move.data.critRatio = 1;
           }
           break;
+        //Misc Abilities
+        case 'No Guard':
+          move.data.accuracy = true;
+          break;
+        case 'Compound Eyes':
+          move.data.accuracy = ~~(move.data.accuracy * 1.3);
+          break;
+        case 'Hustle':
+          //Hustle increases attack by 50% and decreases physical move accuracy by 20%.
+          //We do the second part here, and the other part in calculateStats().
+          if (move.data.category == 'Physical')
+            move.data.accuracy = ~~(move.data.accuracy * 0.8);
       }
 
       //Check items
@@ -1979,109 +2072,109 @@ function calculateMovesBaseEffectiveness(moves, format, params, build) {
         //#endregion
         //#region  Genesect Drives
         case 'Shock Drive':
-          if (move.data.name == 'technoblast') {
+          if (move.name == 'technoblast') {
             move.data.type = 'Electric';
           }
           break;
         case 'Burn Drive':
-          if (move.data.name == 'technoblast') {
+          if (move.name == 'technoblast') {
             move.data.type = 'Fire';
           }
           break;
         case 'Chill Drive':
-          if (move.data.name == 'technoblast') {
+          if (move.name == 'technoblast') {
             move.data.type = 'Ice';
           }
           break;
         case 'Douse Drive':
-          if (move.data.name == 'technoblast') {
+          if (move.name == 'technoblast') {
             move.data.type = 'Water';
           }
           break;
         //#endregion
         //#region Silvally Memories
         case 'Bug Memory':
-          if (move.data.name == 'multiattack') {
+          if (move.name == 'multiattack') {
             move.data.type = 'Bug';
           }
           break;
         case 'Dark Memory':
-          if (move.data.name == 'multiattack') {
+          if (move.name == 'multiattack') {
             move.data.type = 'Dark';
           }
           break;
         case 'Dragon Memory':
-          if (move.data.name == 'multiattack') {
+          if (move.name == 'multiattack') {
             move.data.type = 'Dragon';
           }
           break;
         case 'Electric Memory':
-          if (move.data.name == 'multiattack') {
+          if (move.name == 'multiattack') {
             move.data.type = 'Electric';
           }
           break;
         case 'Fairy Memory':
-          if (move.data.name == 'multiattack') {
+          if (move.name == 'multiattack') {
             move.data.type = 'Fairy';
           }
           break;
         case 'Fighting Memory':
-          if (move.data.name == 'multiattack') {
+          if (move.name == 'multiattack') {
             move.data.type = 'Fighting';
           }
           break;
         case 'Fire Memory':
-          if (move.data.name == 'multiattack') {
+          if (move.name == 'multiattack') {
             move.data.type = 'Fire';
           }
           break;
         case 'Flying Memory':
-          if (move.data.name == 'multiattack') {
+          if (move.name == 'multiattack') {
             move.data.type = 'Flying';
           }
           break;
         case 'Ghost Memory':
-          if (move.data.name == 'multiattack') {
+          if (move.name == 'multiattack') {
             move.data.type = 'Ghost';
           }
           break;
         case 'Grass Memory':
-          if (move.data.name == 'multiattack') {
+          if (move.name == 'multiattack') {
             move.data.type = 'Grass';
           }
           break;
         case 'Ground Memory':
-          if (move.data.name == 'multiattack') {
+          if (move.name == 'multiattack') {
             move.data.type = 'Ground';
           }
           break;
         case 'Ice Memory':
-          if (move.data.name == 'multiattack') {
+          if (move.name == 'multiattack') {
             move.data.type = 'Ice';
           }
           break;
         case 'Poison Memory':
-          if (move.data.name == 'multiattack') {
+          if (move.name == 'multiattack') {
             move.data.type = 'Poison';
           }
           break;
         case 'Psychic Memory':
-          if (move.data.name == 'multiattack') {
+          if (move.name == 'multiattack') {
             move.data.type = 'Psychic';
           }
           break;
         case 'Rock Memory':
-          if (move.data.name == 'multiattack') {
+          if (move.name == 'multiattack') {
             move.data.type = 'Rock';
           }
           break;
         case 'Steel Memory':
-          if (move.data.name == 'multiattack') {
+          if (move.name == 'multiattack') {
             move.data.type = 'Steel';
           }
           break;
         case 'Water Memory':
-          if (move.data.name == 'multiattack') {
+          if (move.name == 'multiattack') {
             move.data.type = 'Water';
           }
           break;
@@ -2440,8 +2533,27 @@ function calculateStats(build, format) {
       break;
   }
 
-  if (build.Ability == 'Super Luck') {
-    build.CriticalChance++;
+  switch (build.Ability) {
+    case 'Super Luck':
+      build.CriticalChance++;
+      break;
+    case 'Huge Power':
+    case 'Pure Power':
+      build.Stats.Atk *= 2;
+      break;
+    case 'Unburden':
+      //We're just going to assume this is taking affect, as it's rarely used when it won't kick in.
+      build.Stats.Spe *= 2;
+      break;
+    case 'Hustle':
+      //Hustle increases attack by 50% and decreases physical move accuracy by 20%.
+      //We do the first part here, and the other part in calculateMovesBaseEffectiveness().
+      build.Stats.Atk = ~~(build.Stats.Atk * 1.5);
+      break;
+    case 'Guts':
+      //Again we're assuming this is activating, it's rarely used if it's not.
+      build.Stats.Atk *= 2;
+      break;
   }
 
   //"In Gold, Silver, and Crystal, if a Pokémon's stat reaches 1024 or higher (such as due to a held Thick Club), it will be reduced to its value modulo 1024." - Bulbapedia
@@ -2464,7 +2576,8 @@ function calculateMoveDamage(
   generation,
   enemyBuild,
   weather,
-  terrain
+  terrain,
+  params
 ) {
   //Define variables
   let effectiveness = move.move.data.baseEffectiveness;
@@ -2475,7 +2588,13 @@ function calculateMoveDamage(
 
   //#region Debug
   console.log('Testing ' + move.move.name + ' against ' + enemyBuild.Pokemon);
-  if (move.move.name == 'foulplay' && enemyBuild.Pokemon == 'Slowking') {
+  if (move.move.name == 'multiattack') {
+    console.log();
+  }
+  if (
+    move.move.name == 'doubleironbash' &&
+    enemyBuild.Pokemon == 'Landorus-Therian'
+  ) {
     console.log();
   }
   if (move.move.name == 'round' && enemyBuild.Pokemon == 'Ferrothorn') {
@@ -2493,7 +2612,6 @@ function calculateMoveDamage(
   //#endregion
 
   //@todo Code logic for power-variable moves like gyro ball and grass knot.
-  //@todo Code logic for knock off.
   //@todo Code checks for tinted lens and unaware.
 
   //Check enemy ability
@@ -2890,6 +3008,7 @@ function calculateMoveDamage(
 
   //Calculate moves with variable base-power
   switch (move.move.name) {
+    case 'grassknot':
     case 'lowkick':
       if (enemyBuild.WeightKG <= 9.9) move.move.data.basePower = 20;
       else if (enemyBuild.WeightKG <= 24.9) move.move.data.basePower = 40;
@@ -2904,6 +3023,38 @@ function calculateMoveDamage(
         move.move.data.basePower = 97;
       }
       break;
+    case 'heavyslam':
+    case 'heatcrash':
+      if (enemyBuild.WeightKG > attackerBuild.WeightKG / 2) {
+        move.move.basePower = 40;
+      } else if (enemyBuild.WeightKG > attackerBuild.WeightKG / 3) {
+        move.move.basePower = 60;
+      } else if (enemyBuild.WeightKG > attackerBuild.WeightKG / 4) {
+        move.move.basePower = 80;
+      } else if (enemyBuild.WeightKG > attackerBuild.WeightKG / 5) {
+        move.move.basePower = 100;
+      } else {
+        move.move.basePower = 120;
+      }
+      break;
+  }
+
+  /*Check for moves that might be included by the user's build, but cannot be calculated, and return null for all of their matchups.
+  This includes self-switching moves if the user has specified not to include them, as this means they are not considering them for damage.
+  This also includes moves the user specifies we should ignore, and self-destruct moves.
+  */
+  if (
+    move.move.data.basePower <= 0 ||
+    (move.move.data.selfSwitch && params.moves.selfSwitch == 'omit') ||
+    move.move.data.selfdestruct ||
+    params.moves.ignoreList.some(
+      m => normalizeString(m) == normalizeString(move.move.name)
+    )
+  ) {
+    return {
+      DamageRange: { min: null, max: null },
+      hitsToKO: { min: null, max: null }
+    };
   }
 
   //Check Weather and Terrain.
@@ -3163,7 +3314,7 @@ function calculateMoveDamage(
   if (move.move.data.multihit) {
     let hits = 0;
     let powerDoublesEachHit = false;
-    if (move.move.data.multiaccuracy) {
+    if (typeof move.move.data.multihit === 'number') {
       hits = move.move.data.multihit;
       switch (move.move.name) {
         case 'triplekick':
@@ -3604,7 +3755,8 @@ function calculateMoveListDamageVsEnemyBuilds(
           format.gen,
           set,
           params.fieldEffects.weather,
-          params.fieldEffects.terrain
+          params.fieldEffects.terrain,
+          params
         );
         let frequency = Math.min(
           enemy.abilities[set.Ability],

@@ -23,7 +23,7 @@ const params = {
     accuracyTolerance: 70,
     contact: 'any',
     recoil: 'omit',
-    selfDebuffing: 'omit',
+    selfDebuffing: 'any',
     selfTrapping: 'omit',
     switching: 'omit',
     minPP: 0,

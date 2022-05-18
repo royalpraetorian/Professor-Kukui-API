@@ -7,6 +7,23 @@ const pokeApi = new Pokedex();
 
 export async function findPokemonByName(pokeName, gen) {
   //Clean up the string to be in line with PokeAPI's syntax
+
+  //Convert to lower case and trim
+  pokeName = pokeName.toLowerCase().trim();
+
+  //If Silvally, Genesect, or Arceus is entered we need to truncate the bit after the - that might be in their name.
+  //For example Silvally-Steel needs to just become 'Silvally'.
+  switch (true) {
+    case pokeName.includes('silvally'):
+    case pokeName.includes('genesect'):
+    case pokeName.includes('arceus'):
+      //Check for a
+      if (pokeName.includes('-')) {
+        let regex = /[a-z]*(?=-)/g;
+        pokeName = pokeName.match(regex)[0];
+      }
+      break;
+  }
   let regex = / /g; //Find spaces
   while (pokeName.match(regex) != null) {
     pokeName = pokeName.replace(regex, '-'); //Replace all spaces with hyphens
@@ -15,8 +32,6 @@ export async function findPokemonByName(pokeName, gen) {
   while (pokeName.match(regex) != null) {
     pokeName = pokeName.replace(regex, ''); //Remove all apostraphes
   }
-  //Convert to lower case and trim
-  pokeName = pokeName.toLowerCase().trim();
   let learnset = await getPokemonLearnset(pokeName, gen);
   let monData = await pokeApi.getPokemonByName(pokeName);
 
